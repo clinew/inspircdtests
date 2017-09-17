@@ -91,17 +91,17 @@ restore() {
 grep "crlfile=" "${DIR_IRCD}/modules.conf"
 if [ $? -ne 0 ]; then
 	echo "No 'crlfile' option in IRCd, quitting."
-	return 1
+	exit 1
 fi
 grep "crlpath=" "${DIR_IRCD}/modules.conf"
 if [ $? -ne 0 ]; then
 	echo "No 'crlpath' option in IRCd, quitting."
-	return 1
+	exit 1
 fi
 grep "crlmode=" "${DIR_IRCD}/modules.conf"
 if [ $? -ne 0 ]; then
 	echo "No 'crlmode' option in IRCd, quitting."
-	return 1
+	exit 1
 fi
 
 # Backup config dirs.
