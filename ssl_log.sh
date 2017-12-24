@@ -29,6 +29,14 @@ connect() {
 	local output=$( (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs/cert.pem" -cert "${name}/certs/${name}.pem" -key "${name}/private/${name}.pem" -connect 127.0.0.1:6697 -ign_eof)
 }
 
+# Sanity check for log 'flush=1'.
+grep -E 'log.*flush="1"' "${DIR_IRCD}/inspircd.conf"
+if [ $? -ne 0 ]; then
+	# Can't parse log for status if it's buffered.
+	echo "Unable to find 'flush=\"1\"' attribute in log tag, quitting"
+	exit -1
+fi
+
 # Backup config dirs.
 mkdir -p "${DIR_HOME}"
 cp -rp "${DIR_IRCD}" "${DIR_HOME}/"
@@ -59,17 +67,6 @@ rm ${LOG}
 rc-service inspircd restart
 ## Connect to server.
 connect "leaf_ca"
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
 ## Check IRCd log.
 fingerprint=$(openssl x509 -in "leaf_ca/certs/leaf_ca.pem" -fingerprint -sha256 -noout | cut -d '=' -f 2 | sed 's/://g' | sed 'y/ABCDEF/abcdef/')
 if cat ${LOG} | grep "${fingerprint}"; then
@@ -98,17 +95,6 @@ rm ${LOG}
 rc-service inspircd restart
 ## Connect to server.
 connect "fail_ca"
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
 ## Check IRCd log.
 if cat ${LOG} | grep "unable to verify the first certificate"; then
 	echo "Invalid certificate detected"
@@ -124,17 +110,6 @@ rm ${LOG}
 rc-service inspircd restart
 ## Connect to server.
 (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs/cert.pem" -connect 127.0.0.1:6697 -ign_eof > /dev/null
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
-kill -HUP `cat /run/inspircd/inspircd.pid` # Fuck the log buffering.
 ## Check IRCd log.
 if cat ${LOG} | grep "Could not get peer certificate"; then
 	echo "Successfully detected lack of peer certificate"
