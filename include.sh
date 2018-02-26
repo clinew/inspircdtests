@@ -46,10 +46,12 @@ ca_req_gen() {
 # $1 The CA which will sign.
 # $2 The CA which will be signed.
 # $3 (optional) Extensions to use.
+# $4 (optional) Hash to sign the cert with.
 ca_req_sign() {
 	local extensions=${3:-v3_friend}
+	local md=${4:-sha512}
 	pushd "$1"
-	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md sha512 -in "csr/$2.pem" -out "certs/$2.pem" -batch
+	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/$2.pem" -out "certs/$2.pem" -batch
 	popd
 }
 
@@ -60,3 +62,4 @@ ca_selfsign() {
 	openssl req -key "private/$1.pem" -new -x509 -days 7200 -sha512 -out "certs/$1.pem" -subj "/CN=$1/"
 	popd
 }
+
