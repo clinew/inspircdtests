@@ -4,5 +4,16 @@ errors -- run at your own risk!
 
 Various scripts used to help me test InspIRCd.
 
+ssl_crl: Test that Certificate Revocation Lists (CRLs) are implemented
+	correctly.
+
+ssl_log: Test that logging for OpenSSL connections and connection attempts is
+	being performed.
+
 ssl_rehash: Test server rehashing functionality with regards to client
 	certificate validation.
+
+ssl_strongcert: Test that strong peer (client) certificate validation is
+	implemented correctly; this feature allows the server to use a
+	whitelist of key types and minimum sizes and another whitelist for
+	certificate signature algorithms.
