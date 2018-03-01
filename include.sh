@@ -19,7 +19,10 @@ ca_crl_gen() {
 
 # Function to generate CA shenanegains.
 # 1: Name of CA to generate.
+# 2: (optional) RSA key size of the CA
 ca_gen() {
+	local keysize=${2:-4096}
+
 	mkdir $1
 	pushd $1
 	cp "${DIR_SSL}/openssl.cnf" ./
@@ -29,7 +32,7 @@ ca_gen() {
 	echo 1000 > serial
 	echo 1000 > crlnumber
 	umask 0077
-	openssl genrsa -out "private/$1.pem" 4096
+	openssl genrsa -out "private/$1.pem" ${keysize}
 	umask 0022
 	popd
 }

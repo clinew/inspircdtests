@@ -7,11 +7,19 @@
 # Test whether or not the specified client can connect.
 # 1: Name of the client that will try connecting.
 # 2: Path to the client's key.
+# 3: (optional) Name of client's CA.
+# 4: (optional) Client intermediate cert(s).
 # Returns 0 if connect successful, 1 if connection failed, 2 if unknown.
 cli_con_test() {
 	name=$1
 	key=$2
-	output=$( (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs/cert.pem" -cert "root_ca/certs/${name}.pem" -key "${key}" -connect 127.0.0.1:6697 -ign_eof)
+	cli_ca=${3:-root_ca}
+	chain=$4
+	if [ ! -z "${chain}" ]; then
+		chain="-cert_chain ${chain}"
+	fi
+
+	output=$( (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs/cert.pem" -cert "${cli_ca}/certs/${name}.pem" -key "${key}" -connect 127.0.0.1:6697 -ign_eof ${chain})
 	if echo "${output}" | grep "You are connected"; then
 		echo "Access granted to '${name}'"
 		return 0
@@ -25,7 +33,7 @@ cli_con_test() {
 
 # Restore configuration handler on SIGINT.
 restore() {
-	for name in root_ca; do
+	for name in root_ca intr_4k intr_2k; do
 		rm -rf "${DIR_HOME}/${name}"
 	done
 	rm -rf ${DIR_HOME}/*.pem
@@ -60,7 +68,7 @@ trap "restore" INT
 pushd "${DIR_HOME}"
 
 # Generate keys + certificates.
-# Root CA.
+# Root CA
 ca_gen "root_ca"
 ca_selfsign "root_ca"
 # Generate keys
@@ -72,6 +80,8 @@ openssl gendsa -out dsa-4k.pem dsaparam-4k.pem
 openssl dsaparam -out dsaparam-2k.pem 2048
 openssl gendsa -out dsa-2k.pem dsaparam-2k.pem
 openssl ecparam -out ec.pem -name brainpoolP512t1 -genkey
+openssl genrsa -out intr-4k.pem 4096
+openssl genrsa -out intr-2k.pem 2048
 # Generate certs
 # 8k-RSA + SHA512
 openssl req -new -key rsa-8k.pem -out req.pem -subj "/CN=RSA-8k-SHA512/"
@@ -109,13 +119,41 @@ ca_req_sign "root_ca" "dsa-2k-sha512" "" "sha512"
 openssl req -new -key ec.pem -out req.pem -subj "/CN=EC-SHA512/"
 mv "req.pem" "root_ca/csr/ec-sha512.pem"
 ca_req_sign "root_ca" "ec-sha512" "" "sha512"
+# Generate intermediate CAs
+# 4k intermediate
+ca_gen "intr_4k"
+ca_req_gen "intr_4k"
+cp "intr_4k/csr/intr_4k.pem" "root_ca/csr/intr_4k.pem"
+ca_req_sign "root_ca" "intr_4k"
+cp "root_ca/certs/intr_4k.pem" "intr_4k/certs/intr_4k.pem"
+# 2k intermediate
+ca_gen "intr_2k" 2048
+ca_req_gen "intr_2k"
+cp "intr_2k/csr/intr_2k.pem" "root_ca/csr/intr_2k.pem"
+ca_req_sign "root_ca" "intr_2k"
+cp "root_ca/certs/intr_2k.pem" "intr_2k/certs/intr_2k.pem"
+# Generate certs with intermediate CAs
+# 4k intermediate, 4k leaf
+openssl req -new -key rsa-4k.pem -out req.pem -subj "/CN=intr-4k-leaf-4k/"
+mv "req.pem" "intr_4k/csr/intr-4k-leaf-4k.pem"
+ca_req_sign "intr_4k" "intr-4k-leaf-4k"
+# 4k intermediate, 2k leaf
+openssl req -new -key rsa-2k.pem -out req.pem -subj "/CN=intr-4k-leaf-2k/"
+mv "req.pem" "intr_4k/csr/intr-4k-leaf-2k.pem"
+ca_req_sign "intr_4k" "intr-4k-leaf-2k"
+# 2k intermediate, 4k leaf
+openssl req -new -key rsa-4k.pem -out req.pem -subj "/CN=intr-2k-leaf-4k/"
+mv "req.pem" "intr_2k/csr/intr-2k-leaf-4k.pem"
+ca_req_sign "intr_2k" "intr-2k-leaf-4k"
 
 # Configure InspIRCd properly.
 ca_crl_gen "root_ca"
+ca_crl_gen "intr_4k"
+ca_crl_gen "intr_2k"
 cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/cert.pem"
 cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/client_cas.pem"
 cp "root_ca/private/root_ca.pem" "${DIR_SSL}/private/key.pem"
-cp "root_ca/crl/root_ca.pem" "${DIR_SSL}/crl/crl.pem"
+cat {root_ca,intr_4k,intr_2k}/crl/*.pem > "${DIR_SSL}/crl/crl.pem"
 results=()
 
 ### No options set, connect regularly
@@ -315,6 +353,37 @@ if [ $? -ne 0 ]; then
 	results[20]=""
 else
 	results[20]="FAILED"
+fi
+
+### Peer chain tests.
+sed -ri "s/#*(peer_keysize_min=\")[^\"]+/\1rsaEncryption:4096/" "${DIR_IRCD}/modules.conf"
+sed -ri "s/(peer_sigalg)/#\1/" "${DIR_IRCD}/modules.conf"
+rc-service inspircd restart
+# Test 21: 4k intermediate, 4k leaf passes
+echo "Test 21"
+cli_con_test "intr-4k-leaf-4k" "rsa-4k.pem" "intr_4k" "intr_4k/certs/intr_4k.pem"
+if [ $? -eq 0 ]; then
+	results[21]=""
+else
+	results[21]="FAILED"
+fi
+# Test 22: 4k intermediate, 2k leaf fails
+echo "Test 22"
+rc-service inspircd restart
+cli_con_test "intr-4k-leaf-2k" "rsa-2k.pem" "intr_4k" "intr_4k/certs/intr_4k.pem"
+if [ $? -eq 1 ]; then
+	results[22]=""
+else
+	results[22]="FAILED"
+fi
+# Test 23: 2k intermediate, 4k leaf fails
+echo "Test 23"
+rc-service inspircd restart
+cli_con_test "intr-2k-leaf-4k" "rsa-4k.pem" "intr_2k" "intr_2k/certs/intr_2k.pem"
+if [ $? -eq 1 ]; then
+	results[23]=""
+else
+	results[23]="FAILED"
 fi
 
 # Print results.
