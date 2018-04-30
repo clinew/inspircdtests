@@ -5,95 +5,119 @@
 # "fof" (friend-of-friend).  Before rehashing the fof shouldn't be
 # able to connect with their certificate; after rehashing, they should
 # be able to connect.
-#
-# TODO: Automate IRC client connecting.  Need IRC client automation
-#       software...
 
-# Test dir home to backup original config.
-DIR_HOME="${HOME}/.inspircdtests"
-# Home dir for the InspIRCd configuration.
-DIR_IRCD="/etc/inspircd"
-# Home dir for the OpenSSL files.
-DIR_SSL="/etc/ssl/frostsnow.net"
+source "include.sh"
+
+# Test whether or not the specified client can connect.
+# 1: Name of the client that will try connecting.
+# 2: Set to nonempty to rehash.
+# Returns 0 if connect successful, 1 if connection failed, 2 if unknown.
+cli_con_test() {
+	name=$1
+	rehash=${2:-""}
+
+	# Build input to the server.
+	input="echo -e \"USER a hostess servant rjhacker\nNICK a\"; sleep 5;"
+	if [ ! -z "${rehash}" ]; then
+		input="${input} echo \"rehash\"; sleep 5; echo \"rehash -ssl\"; sleep 5;"
+	fi
+	input="${input} echo \"QUIT\";"
+
+	# Connect and send input.  This is getting quite evil.
+	output=$( (eval "${input}") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs/cert.pem" -cert "${name}/certs/${name}.pem" -key "${name}/private/${name}.pem" -connect 127.0.0.1:6697 -ign_eof)
+	if echo "${output}" | grep "You are connected"; then
+		echo "Access granted to '${name}'"
+		return 0
+	elif echo "${output}" | grep "Access denied by configuration"; then
+		echo "Access denied for '${name}'"
+		return 1
+	fi
+	echo "UNKNOWN RESULT for '${name}'"
+	return 2
+}
+
+# Return to original configuration.
+restore() {
+	rm -rf "${DIR_SSL}"
+	rm -rf "${DIR_IRCD}"
+	rm -rf "${DIR_HOME}/"{owner,friend,fof}
+	cp -rp "${DIR_HOME}/`basename ${DIR_IRCD}`" "${DIR_IRCD}"
+	cp -rp "${DIR_HOME}/`basename ${DIR_SSL}`" "${DIR_SSL}"
+	rc-service inspircd restart
+}
 
 # Backup config dirs.
 mkdir -p "${DIR_HOME}"
 cp -rp "${DIR_IRCD}" "${DIR_HOME}/"
 cp -rp "${DIR_SSL}" "${DIR_HOME}/"
+trap "restore" EXIT
 
 # Create owner cert.
-mkdir -p "${DIR_SSL}"
-cd "${DIR_SSL}"
-rm -rf ./*
-umask 0077
-mkdir certs csr crl newcerts private
-touch index.txt
-echo 1000 > serial
-cp "${DIR_HOME}/`basename ${DIR_SSL}`/openssl.cnf" ./
-cp "${DIR_HOME}/`basename ${DIR_SSL}`/dhparams.pem" ./
-openssl genrsa -out private/owner.pem 4096
-openssl req -config openssl.cnf -key private/owner.pem -new -x509 -days 7200 -sha512 -extensions v3_ca -out certs/owner.pem -subj '/CN=owner/'
-ln certs/owner.pem certs/cert.pem
-ln private/owner.pem private/key.pem
+cd "${DIR_HOME}"
+ca_gen "owner"
+ca_selfsign "owner"
+ca_crl_gen "owner"
 
 # Create friend cert.
-mkdir -p "friend"
-cp openssl.cnf friend/openssl.cnf
-pushd "friend"
-mkdir certs csr crl newcerts private
-touch index.txt
-echo 1000 > serial
-#sed -ri 's/(\/etc\/ssl\/frostsnow\.net)/\1\/friend/' openssl.cnf
-sed -ri "s/^dir\\s+=\\s+.*/dir = .\\//" openssl.cnf
-openssl genrsa -out private/friend.pem 4096
-openssl req -new -sha512 -key private/friend.pem -out csr/friend.pem -subj '/CN=friend/'
-popd
-cp friend/csr/friend.pem csr/friend.pem
-openssl ca -config openssl.cnf -keyfile private/owner.pem -cert certs/owner.pem -extensions v3_friend -days 7200 -notext -md sha512 -in csr/friend.pem -out certs/friend.pem -batch
-cp certs/friend.pem friend/certs/friend.pem
+ca_gen "friend"
+ca_req_gen "friend"
+cp "friend/csr/friend.pem" "owner/csr/friend.pem"
+ca_req_sign "owner" "friend"
+cp "owner/certs/friend.pem" "friend/certs/friend.pem"
+ca_crl_gen "friend"
 
 # Create fof cert.
-pushd friend
-mkdir -p "fof"
-pushd fof
-mkdir certs csr crl newcerts private
-openssl genrsa -out private/fof.pem 4096
-openssl req -new -sha512 -key private/fof.pem -out csr/fof.pem -subj '/CN=fof/'
-popd
-cp fof/csr/fof.pem csr/fof.pem
-openssl ca -config openssl.cnf -keyfile private/friend.pem -cert certs/friend.pem -extensions v3_fof -days 7200 -notext -md sha512 -in csr/fof.pem -out certs/fof.pem -batch
-cp certs/fof.pem fof/certs/fof.pem
-popd
+ca_gen "fof"
+ca_req_gen "fof"
+cp "fof/csr/fof.pem" "friend/csr/fof.pem"
+ca_req_sign "friend" "fof"
+cp "friend/certs/fof.pem" "fof/certs/fof.pem"
 
-# Owner cert for client validation.
-cp certs/cert.pem certs/client_cas.pem
-umask 0044
+# Reconfigure InspIRCd.
+cp owner/certs/owner.pem "${DIR_SSL}/certs/cert.pem"
+cp owner/private/owner.pem "${DIR_SSL}/private/key.pem"
+cat owner/certs/owner.pem > "${DIR_SSL}/certs/client_cas.pem"
+cat owner/crl/owner.pem > "${DIR_SSL}/crl/crl.pem"
+FINGERPRINT=`openssl x509 -fingerprint -sha256 -in owner/certs/owner.pem -noout | sed 's/.*=//' | sed 's/://g' | sed 'y/ABCDEF/abcdef/'`
+sed -ri "s/fingerprint=\".*\"/fingerprint=\"${FINGERPRINT}\"/" "${DIR_IRCD}/opers.conf"
+rc-service inspircd restart
 
 # fof sends cert, fails.
 chown -R inspircd:inspircd "${DIR_SSL}"
-FINGERPRINT=`openssl x509 -fingerprint -in ${DIR_SSL}/certs/owner.pem -noout | sed 's/.*=//' | sed 's/://g' | sed 'y/ABCDEF/abcdef/'`
-sed -ri "s/fingerprint=\".*\"/fingerprint=\"${FINGERPRINT}\"/" "${DIR_IRCD}/opers.conf"
-rc-service inspircd restart
-echo "Connect with fof client (should fail)"
-echo "    /connect -ssl -ssl_cert friend/fof/certs/fof.pem -ssl_pkey friend/fof/private/fof.pem 127.0.0.1 6697 herp derp"
-read
+echo "Connecting with fof client (should fail)"
+cli_con_test "fof"
+ret=$?
+if [ $ret -eq 0 ]; then
+	echo "Test should have failed but it passed"
+	exit 1
+elif [ $ret -ne 1 ]; then
+	echo "Unknown result, dying"
+	exit 1
+fi
 
 # Reconfigure to add friend cert as CA.
-cat certs/friend.pem >> certs/client_cas.pem
-echo "Reconfigure server with rehash then rehash -ssl"
-echo "    /connect -ssl -ssl_cert certs/owner.pem -ssl_pkey private/owner.pem 127.0.0.1 6697 herp derp"
-echo "    /rehash"
-echo "    /rehash -ssl"
-read
+echo "Rehashing InspIRCd"
+cat friend/certs/friend.pem >> "${DIR_SSL}/certs/client_cas.pem"
+cat friend/crl/friend.pem >> "${DIR_SSL}/crl/crl.pem"
+cli_con_test "owner" "rehash"
+ret=$?
+if [ ${ret} -eq 1 ]; then
+	echo "Owner should have connected but didn't"
+	exit 1
+elif [ ${ret} -ne 0 ]; then
+	echo "Unknown result, dying"
+	exit 1
+fi
 
 # fof sends cert, success.
 echo "Reconnect with fof client (should now work)"
-echo "    /connect -ssl -ssl_cert friend/fof/certs/fof.pem -ssl_pkey friend/fof/private/fof.pem 127.0.0.1 6697 herp derp"
-read
-
-# Restore inspircd dir.
-rm -rf "${DIR_SSL}"
-rm -rf "${DIR_IRCD}"
-cp -rp "${DIR_HOME}/`basename ${DIR_IRCD}`" "${DIR_IRCD}"
-cp -rp "${DIR_HOME}/`basename ${DIR_SSL}`" "${DIR_SSL}"
-rc-service inspircd restart
+cli_con_test "fof"
+ret=$?
+if [ ${ret} -eq 1 ]; then
+	echo "fof failed to connect but should have succeeded"
+	exit 1
+elif [ ${ret} -ne 0 ]; then
+	echo "Unknown result, dying"
+	exit 1
+fi
+exit 0 # Test passed.
