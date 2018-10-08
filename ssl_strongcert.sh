@@ -79,7 +79,7 @@ openssl dsaparam -out dsaparam-4k.pem 4096
 openssl gendsa -out dsa-4k.pem dsaparam-4k.pem
 openssl dsaparam -out dsaparam-2k.pem 2048
 openssl gendsa -out dsa-2k.pem dsaparam-2k.pem
-openssl ecparam -out ec.pem -name brainpoolP512t1 -genkey
+openssl ecparam -out ec.pem -name brainpoolP512r1 -genkey
 openssl genrsa -out intr-4k.pem 4096
 openssl genrsa -out intr-2k.pem 2048
 # Generate certs
