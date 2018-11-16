@@ -50,6 +50,13 @@ if [ $? -ne 0 ]; then
 	exit -1
 fi
 
+# Sanity check for SHA-256 hash.
+openssl_sha256
+if [ $? -ne 0 ]; then
+	echo "Unable to find 'hash=\"sha256\"' enablement in openssl module"
+	exit -1
+fi
+
 # Backup config dirs.
 mkdir -p "${DIR_HOME}"
 cp -rp "${DIR_IRCD}" "${DIR_HOME}/"
