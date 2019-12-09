@@ -40,16 +40,35 @@ ca_gen() {
 
 	mkdir $1
 	pushd $1
+	ca_gen_skel_
+	umask 0077
+	openssl genrsa -out "private/$1.pem" ${keysize}
+	umask 0022
+	popd
+}
+
+# Generate a CA whose private key is a named elliptic curve.
+# 1: The name of the CA to generate.
+# 2: The named elliptic curve for the private key
+ca_gen_ec() {
+	mkdir $1
+	pushd $1
+	ca_gen_skel_
+	umask 0077
+	openssl ecparam -out "private/$1.pem" -name "${2}" -genkey
+	umask 0022
+	popd
+}
+
+# Generate all the cruft (skeleton) stuff for a CA, but do not generate the
+# private key.  Private function.
+ca_gen_skel_() {
 	cp "${DIR_SSL}/openssl.cnf" ./
 	sed -ri "s/^dir\\s+=\\s+.*/dir = .\\//" openssl.cnf
 	mkdir certs csr crl newcerts private
 	touch index.txt
 	echo 1000 > serial
 	echo 1000 > crlnumber
-	umask 0077
-	openssl genrsa -out "private/$1.pem" ${keysize}
-	umask 0022
-	popd
 }
 
 # Function to generate a CSR.

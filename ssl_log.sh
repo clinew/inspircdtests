@@ -29,6 +29,8 @@
 # Test 05: Client presents intermediate CA and leaf cert
 #   A -> B -> C (Server trusts root CA 'A' and client connects using
 #   intermediate CA 'B' and signed cert 'C')
+# Test 06: Client invalid certificate public key type
+#   Client presents a client certificate but with an invalid public key type
 
 # Load includes.
 source include.sh
@@ -63,11 +65,16 @@ if [ $? -ne 0 ]; then
 	exit -1
 fi
 
-# Sanity check for SHA-256 hash.
+# Sanity checks.
 openssl_sha256
 if [ $? -ne 0 ]; then
 	echo "Unable to find 'hash=\"sha256\"' enablement in openssl module"
-	exit -1
+	exit 1
+fi
+grep -E 'peer_keysize_min' "${DIR_IRCD}/modules.conf"
+if [ $? -ne 0 ]; then
+	echo "Expected to find 'peer_keysize_min' in OpenSSL config file"
+	exit 1
 fi
 
 # Backup config dirs.
@@ -88,6 +95,13 @@ ca_req_gen "leaf_ca"
 cp "leaf_ca/csr/leaf_ca.pem" "root_ca/csr/leaf_ca.pem"
 ca_req_sign "root_ca" "leaf_ca"
 cp "root_ca/certs/leaf_ca.pem" "leaf_ca/certs/leaf_ca.pem"
+
+# Generate valid EC client certificate
+ca_gen_ec "ec_ca" "secp521r1"
+ca_req_gen "ec_ca"
+cp "ec_ca/csr/ec_ca.pem" "root_ca/csr/ec_ca.pem"
+ca_req_sign "root_ca" "ec_ca"
+cp "root_ca/certs/ec_ca.pem" "ec_ca/certs/ec_ca.pem"
 
 # Run test #01 (Connect with valid certificate)
 echo "Test 01:"
@@ -227,6 +241,27 @@ else
 	TEST05=1
 fi
 
+# Test 06: Client invalid certificate public key type
+echo "Test 06:"
+## Configure server.
+cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/cert.pem"
+cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/client_cas.pem"
+cp "root_ca/private/root_ca.pem" "${DIR_SSL}/private/key.pem"
+cp "root_ca/crl/root_ca.pem" "${DIR_SSL}/crl/crl.pem"
+sed -ri "s/#*(peer_keysize_min=\")[^\"]+/\1rsaEncryption:4096/" "${DIR_IRCD}/modules.conf"
+rm ${LOG}
+rc-service inspircd restart
+## Connect to server.
+connect "ec_ca"
+if cat ${LOG} | grep "does not match expected peer key type:size pairs"; then
+	echo "Invalid EC curve rejected"
+	TEST06=1
+else
+	echo "Invalid EC curve accepted!"
+	echo "Log: $(cat ${LOG})"
+	TEST06=0
+fi
+
 # Report results.
 PASS=1
 if [ $TEST01 -eq 1 ]; then
@@ -258,6 +293,12 @@ if [ $TEST05 -eq 1 ]; then
 else
 	PASS=0
 	echo "Test 05 FAILED"
+fi
+if [ $TEST06 -eq 1 ]; then
+	echo "Test 06 PASSED!"
+else
+	PASS=0
+	echo "Test 06 FAILED"
 fi
 
 restore
