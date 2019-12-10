@@ -89,7 +89,7 @@ ca_selfsign "root_ca"
 openssl genrsa -out rsa-8k.pem 8192
 openssl genrsa -out rsa-4k.pem 4096
 openssl genrsa -out rsa-2k.pem 2048
-openssl ecparam -out ec.pem -name brainpoolP512r1 -genkey
+openssl ecparam -out ec.pem -name secp521r1 -genkey
 openssl genrsa -out intr-4k.pem 4096
 openssl genrsa -out intr-2k.pem 2048
 # Generate certs
@@ -217,6 +217,9 @@ else
 	results[5]="FAILED"
 fi
 # Test 06: EC 256 fails
+# TODO: Refactor keysize specifications to allow more precisely specifying
+# elliptic curves, and create a test that checks for success so that it's
+# clear that the certificate didn't fail for some other reason.
 echo "Test 06"
 cli_con_test "ec-sha512" "ec.pem"
 if [ $? -eq 1 ]; then
