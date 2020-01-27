@@ -63,14 +63,14 @@ restore() {
 source include.sh
 
 # Check InspIRCd config.
-grep -E 'peer_keysize_min' "${DIR_IRCD}/modules.conf"
+grep -E 'peer_keysize_min=' "${DIR_IRCD}/modules.conf"
 if [ $? -ne 0 ]; then
-	echo "Expected to find 'peer_keysize_min' in OpenSSL config file"
+	echo "Expected to find 'peer_keysize_min=' in OpenSSL config file"
 	exit 1
 fi
-grep -E 'peer_sigalg' "${DIR_IRCD}/modules.conf"
+grep -E 'peer_sigalg=' "${DIR_IRCD}/modules.conf"
 if [ $? -ne 0 ]; then
-	echo "Expected to find 'peer_sigalg' in OpenSSL config file"
+	echo "Expected to find 'peer_sigalg=' in OpenSSL config file"
 	exit 1
 fi
 
