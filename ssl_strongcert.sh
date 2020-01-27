@@ -156,6 +156,7 @@ cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/cert.pem"
 cp "root_ca/certs/root_ca.pem" "${DIR_SSL}/certs/client_cas.pem"
 cp "root_ca/private/root_ca.pem" "${DIR_SSL}/private/key.pem"
 cat {root_ca,intr_4k,intr_2k}/crl/*.pem > "${DIR_SSL}/crl/crl.pem"
+sed -ri "s/#(crlfile)/\1/" "${DIR_IRCD}/modules.conf"
 results=()
 
 ### No options set, connect regularly

@@ -99,6 +99,7 @@ cp owner/certs/owner.pem "${DIR_SSL}/certs/cert.pem"
 cp owner/private/owner.pem "${DIR_SSL}/private/key.pem"
 cat owner/certs/owner.pem > "${DIR_SSL}/certs/client_cas.pem"
 cat owner/crl/owner.pem > "${DIR_SSL}/crl/crl.pem"
+sed -ri "s/#(crlfile)/\1/" "${DIR_IRCD}/modules.conf"
 FINGERPRINT=`openssl x509 -fingerprint -sha256 -in owner/certs/owner.pem -noout | sed 's/.*=//' | sed 's/://g' | sed 'y/ABCDEF/abcdef/'`
 sed -ri "s/fingerprint=\".*\"/fingerprint=\"${FINGERPRINT}\"/" "${DIR_IRCD}/opers.conf"
 rc-service inspircd restart
