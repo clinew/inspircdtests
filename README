@@ -4,6 +4,8 @@ errors -- run at your own risk!
 
 Various scripts used to help me test InspIRCd.
 
+afr: Test the "Admin, Friend, Referred" PKI.
+
 ssl_crl: Test that Certificate Revocation Lists (CRLs) are implemented
 	correctly.
 

@@ -1,0 +1,126 @@
+#
+# OpenSSL example configuration file.
+# This is mostly being used for generation of certificate requests.
+#
+
+[ ca ]
+default_ca	= frostsnow_net		# The default ca section
+
+[ frostsnow_net ]
+# Directory and file locations
+dir		= /etc/ssl/frostsnow.net		# Where everything is kept
+certs		= $dir/certs		# Where the issued certs are kept
+crl_dir		= $dir/crl		# Where the issued crl are kept
+new_certs_dir	= $dir/newcerts		# default place for new certs.
+database	= $dir/index.txt	# database index file.
+serial		= $dir/serial 		# The current serial number
+RANDFILE	= $dir/private/.rand	# private random number file
+
+# Root key and cert.
+private_key	= $dir/private/key.pem # The private key
+certificate	= $dir/certs/cert.pem 	# The CA certificate
+
+
+# Certificate revocation lists.
+crlnumber	= $dir/crlnumber	# the current crl number
+					# must be commented out to leave a V1 CRL
+crl		= $dir/crl/crl.pem 		# The current CRL
+crl_extensions	= crl_ext
+default_crl_days	= 30			# how long before next CRL
+
+# Use better hash.
+default_md 	= sha512
+
+name_opt 	= ca_default		# Subject Name options
+cert_opt 	= ca_default		# Certificate field options
+default_days 	= 7200
+preserve	= no			# keep passed DN ordering
+policy		= policy_anything
+
+x509_extensions	= v3_friend		# The extentions to add to the cert
+
+# For the 'anything' policy
+# At this point in time, you must list all acceptable 'object'
+# types.
+[ policy_anything ]
+countryName		= optional
+stateOrProvinceName	= optional
+localityName		= optional
+organizationName	= optional
+organizationalUnitName	= optional
+commonName		= supplied
+emailAddress		= optional
+
+[ req ]
+# Options for the 'req' tool.
+default_bits		= 4096
+distinguished_name	= req_distinguished_name
+string_mask		= utf8only
+
+# Use the better hash.
+default_md		= sha512
+
+[ req_distinguished_name ]
+countryName			= Country Name (2 letter code)
+stateOrProvinceName		= State or Province Name (full name)
+localityName			= Locality Name (eg, city)
+0.organizationName		= Organization Name (eg, company)
+# we can do this but it is not needed normally :-)
+#1.organizationName		= Second Organization Name (eg, company)
+organizationalUnitName		= Organizational Unit Name (eg, section)
+commonName			= Common Name (e.g. server FQDN or YOUR name)
+emailAddress			= Email Address
+
+#countryName_default		= AU
+#stateOrProvinceName_default	= Some-State
+#0.organizationName_default	= Internet Widgits Pty Ltd
+#1.organizationName_default	= World Wide Web Pty Ltd
+#organizationalUnitName_default	=
+
+# Extensions for root CA.
+[ v3_root ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:TRUE
+
+# Old, custom PKI method, "friend-of-friend".  Repalced by AFR PKI.
+[ v3_friend ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:TRUE,pathlen:0
+
+# Old, custom PKI method, "friend-of-friend".  Repalced by AFR PKI.
+[ v3_fof ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:FALSE
+
+# Extensions for a "service" certificate.  Service certificates must be used
+# in order to verify the authenticity of a particular service to the end user.
+[ v3_service ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:FALSE
+extendedKeyUsage = critical,serverAuth
+
+# Extensions for a "signing" certificate.  Signing certificates may be used by
+# friends in order to invite users (known as "referred" users) to the service.
+[ v3_signing ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:TRUE, pathlen:0
+# TODO: Does this designate the certificate as for signing certificates only?
+#KeyUsage = critical,keyCertSign
+
+# Extensions for a "client" certificate.  Client certificates may only be used
+# by users in order to authenticate to a service.  The client may either be a
+# friend or referred user.
+[ v3_client ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:FALSE
+extendedKeyUsage = critical,clientAuth
+
+[ crl_ext ]
+authorityKeyIdentifier=keyid:always
+

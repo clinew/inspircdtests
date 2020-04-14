@@ -38,8 +38,8 @@ ca_crl_gen() {
 ca_gen() {
 	local keysize=${2:-4096}
 
-	mkdir $1
-	pushd $1
+	mkdir "$1"
+	pushd "$1"
 	ca_gen_skel_
 	umask 0077
 	openssl genrsa -out "private/$1.pem" ${keysize}
@@ -79,6 +79,14 @@ ca_req_gen() {
 	popd
 }
 
+# Function to retrieve a signed certificate from the signing CA back to the
+# requesting CA.  This is currently a glorified wrapper for a copy function.
+# $1 The CA which did the signing.
+# $2 The CA which was signed.
+ca_req_receive() {
+	cp "$1/certs/$2.pem" "$2/certs/$2.pem"
+}
+
 # Function to sign a CSR from a CA.
 # $1 The CA which will sign.
 # $2 The CA which will be signed.
@@ -90,6 +98,14 @@ ca_req_sign() {
 	pushd "$1"
 	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/$2.pem" -out "certs/$2.pem" -batch
 	popd
+}
+
+# Function to submit one CA's CSR to another CA for signing.  This is currently
+# a glorified wrapper for a copy function.
+# $1 The CA which will sign.
+# $2 The CA which will be signed.
+ca_req_submit() {
+	cp "$2/csr/$2.pem" "$1/csr/$2.pem"
 }
 
 # Function to self-sign a CA.
