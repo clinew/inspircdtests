@@ -88,6 +88,9 @@ ca_req_receive() {
 }
 
 # Function to sign a CSR from a CA.
+# Signing a certificate and then immediately using it has been known to cause
+# 'Not activated, or expired certificate' errors, so sign it 3 seconds in the
+# past.
 # $1 The CA which will sign.
 # $2 The CA which will be signed.
 # $3 (optional) Extensions to use.
@@ -96,7 +99,7 @@ ca_req_sign() {
 	local extensions=${3:-v3_friend}
 	local md=${4:-sha512}
 	pushd "$1"
-	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/$2.pem" -out "certs/$2.pem" -batch
+	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/$2.pem" -out "certs/$2.pem" -batch -startdate $(TZ=UTC date +%Y%m%d%H%M%SZ --date "now - 3 seconds")
 	popd
 }
 

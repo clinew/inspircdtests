@@ -58,6 +58,12 @@ restore() {
 	exit 0
 }
 
+# Print out the current subtest number and increment the subtest counter.
+subtest_mark() {
+	echo "Test $i.$j"
+	j=$(($j + 1))
+}
+
 # Sanity checks.
 if [ ! -d "${DIR_IRCD}" ]; then
 	echo "InspIRCd directory '${DIR_IRCD}' does not exist, quitting."
@@ -97,11 +103,18 @@ cp "openssl.cnf" "${DIR_SSL}/openssl.cnf"
 pushd "${DIR_SSL}"
 
 # Test 00: Initialize.
+#        root_ca                          fake_root_ca
+#         /   \                           /         \
+# localhost   signing_ca          fake_localhost   fake_signing_ca
+#             /                                     /
+#         admin                             fake_admin
 # This tests that the PKI was initialized successfully.  This means that the
 # service is offering the correct server certificate and will only accept
 # connections from a valid client certificate.
 i=0
+j=0
 RESULTS[$i]=""
+echo "Test $i: Initialize"
 
 ## Initialize root certificate.
 ca_gen "root_ca"
@@ -173,13 +186,15 @@ rc-service inspircd restart
 
 ## Test client successfully rejects fake server.
 set +e
+subtest_mark
 (sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/CAfile.pem" -connect localhost:6697
 if [ $? -ne 1 ]; then
-	RESULTS[$i]+="\tClient authenticated illegitimate service\n"
+	RESULTS[$i]+="\t$j: Client authenticated illegitimate service\n"
 fi
+subtest_mark
 (sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_CAfile.pem" -connect localhost:6697
 if [ $? -ne 0 ]; then
-	RESULTS[$i]+="\tIllegitimate service probably not set-up properly\n"
+	RESULTS[$i]+="\t$j: Illegitimate service probably not set-up properly\n"
 fi
 set -e
 
@@ -196,25 +211,65 @@ rc-service inspircd restart
 
 ## Test client successfully authenticates service.
 set +e
+subtest_mark
 (sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/CAfile.pem" -connect localhost:6697
 if [ $? -ne 0 ]; then
-	RESULTS[$i]+="\tClient unable to authenticate service\n"
+	RESULTS[$i]+="\t$j: Client unable to authenticate service\n"
 fi
+subtest_mark
 (sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_CAfile.pem" -connect localhost:6697
 if [ $? -ne 1 ]; then
-	RESULTS[$i]+="\tClient authenticated despite illlegitimate certificate\n"
+	RESULTS[$i]+="\t$j: Client authenticated despite illlegitimate certificate\n"
 fi
 
 ## Test client successfully authenticates with valid client cert.
+subtest_mark
 connect "admin"
 if [ $? -ne 0 ]; then
-	RESULTS[$i]+="\tClient unable to authenticate to service\n"
+	RESULTS[$i]+="\t$j: Client unable to authenticate to service\n"
 fi
 
 ## Test client fails to authenticate with invalid client cert.
+subtest_mark
 connect "fake_admin"
 if [ $? -ne 1 ]; then
-	RESULTS[$i]+="\tIllegitimate client authenticated successfully\n"
+	RESULTS[$i]+="\t$j: Illegitimate client authenticated successfully\n"
+fi
+
+# Test 01: Sign friend.
+#        root_ca                     fake_root_ca
+#         /   \                      /         \
+# localhost   signing_ca     fake_localhost   fake_signing_ca
+#             /    |                           /
+#         admin   friend               fake_admin
+# Sign a friend's certificate and verify that they can then connect to the
+# service.  Parity: Ensure that a non-authorized certificate is unable to
+# connect.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Initialize friend's certificate.
+set -e
+ca_gen "friend"
+ca_req_gen "friend"
+ca_req_submit "signing_ca" "friend"
+ca_req_sign "signing_ca" "friend" "v3_client"
+ca_req_receive "signing_ca" "friend"
+
+## Test authenticating to the server as "friend".
+set +e
+subtest_mark
+connect "friend"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend' unable to authenticate to service\n"
+fi
+
+## Test authentication failure to the server as "fake_admin".
+subtest_mark
+connect "fake_admin"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'fake_admin' successfully authenticated\n"
 fi
 
 # Print results.
