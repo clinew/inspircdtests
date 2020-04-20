@@ -322,6 +322,55 @@ if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: 'friend' unable to authenticate to service\n"
 fi
 
+# Test 03: Generate friend signing cert.
+#        root_ca                                    fake_root_ca
+#         /   \                                     /         \
+# localhost   signing_ca -                  fake_localhost   fake_signing_ca
+#             /    |      \                                   /
+#         admin   friend   friend_referrer             fake_admin
+#                                |
+#                             referred
+# Give a friend referrer access and then ensure that the referred person is
+# able to connect.  Parity: Ensure that an unauthorized cert can not connect.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Create friend's signing cert.
+set -e
+ca_gen "friend_referrer"
+ca_req_gen "friend_referrer"
+ca_req_submit "signing_ca" "friend_referrer"
+ca_req_sign "signing_ca" "friend_referrer" "v3_referrer"
+ca_req_receive "signing_ca" "friend_referrer"
+ca_crl_gen "friend_referrer"
+cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/friend_referrer/certs/friend_referrer.pem" > "${DIR_SSL}/certfile.pem"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/friend_referrer/crl/friend_referrer.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Friend creates referred certificate.
+ca_gen "referred"
+ca_req_gen "referred"
+ca_req_submit "friend_referrer" "referred"
+ca_req_sign "friend_referrer" "referred" "v3_client"
+ca_req_receive "friend_referrer" "referred"
+ca_crl_gen "friend_referrer"
+
+## Test referred certificate.
+set +e
+subtest_mark
+connect "referred"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred' unable to authenticate to service\n"
+fi
+
+## Test unauthorized certificate.
+subtest_mark
+connect "fake_admin"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'fake_admin' not unauthenticated to service\n"
+fi
+
 # Print results.
 set +x
 passed=1
