@@ -28,7 +28,7 @@ LOG="/var/log/inspircd/ircd.log"
 # $1 The CA to generate the CRL for.
 ca_crl_gen() {
 	pushd "$1"
-	openssl ca -gencrl -config openssl.cnf -cert "certs/$1.pem" -keyfile "private/$1.pem" -out "crl/$1.pem"
+	openssl ca -gencrl -config openssl.cnf -cert "certs/${1}.pem" -keyfile "private/${1}.pem" -out "crl/${1}.pem"
 	popd
 }
 
@@ -99,7 +99,7 @@ ca_req_sign() {
 	local extensions=${3:-v3_friend}
 	local md=${4:-sha512}
 	pushd "$1"
-	openssl ca -config openssl.cnf -keyfile "private/$1.pem" -cert "certs/$1.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/$2.pem" -out "certs/$2.pem" -batch -startdate $(TZ=UTC date +%Y%m%d%H%M%SZ --date "now - 3 seconds")
+	openssl ca -config openssl.cnf -keyfile "private/${1}.pem" -cert "certs/${1}.pem" -extensions "$extensions" -days 7200 -notext -md ${md} -in "csr/${2}.pem" -out "certs/${2}.pem" -batch -startdate $(TZ=UTC date +%Y%m%d%H%M%SZ --date "now - 3 seconds")
 	popd
 }
 
@@ -109,6 +109,17 @@ ca_req_sign() {
 # $2 The CA which will be signed.
 ca_req_submit() {
 	cp "$2/csr/$2.pem" "$1/csr/$2.pem"
+}
+
+# Have the specified CA revoke the specified CA's certificate.  This also
+# updates the former CA's CRL.
+# $1 The CA which will be issuing the revocation.
+# $2 The CA which will be revoked.
+ca_revoke() {
+	pushd "$1"
+	openssl ca -config openssl.cnf -keyfile "private/${1}.pem" -cert "certs/${1}.pem" -revoke "certs/${2}.pem"
+	popd
+	ca_crl_gen "${1}"
 }
 
 # Function to self-sign a CA.

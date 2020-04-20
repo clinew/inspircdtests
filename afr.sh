@@ -272,6 +272,56 @@ if [ $? -ne 1 ]; then
 	RESULTS[$i]+="\t$j: 'fake_admin' successfully authenticated\n"
 fi
 
+# Test 02: Revoke friend.
+#        root_ca
+#         /   \
+# localhost   signing_ca -
+#             /    |      \
+#         admin   friend   friend_bad (R)
+# Revoke a bad friend's client certificate and verify that the bad friend can
+# then no longer connect to the service.  Parity: Ensure that a regular friend
+# can still connect to the service.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Initialize bad friend's certificate.
+set -e
+ca_gen "friend_bad"
+ca_req_gen "friend_bad"
+ca_req_submit "signing_ca" "friend_bad"
+ca_req_sign "signing_ca" "friend_bad" "v3_client"
+ca_req_receive "signing_ca" "friend_bad"
+
+## Test authenticating to the server as 'friend_bad'.
+set +e
+subtest_mark
+connect "friend_bad"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend_bad' unable to authenticate to service\n"
+fi
+
+## Revoke the certificate of 'friend_bad'.
+set -e
+ca_revoke "signing_ca" "friend_bad"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Test authentication failure for revoked 'friend_bad'.
+set +e
+subtest_mark
+connect "friend_bad"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'friend_bad' not unauthorized by service\n"
+fi
+
+## Test authentication success for 'friend'.
+subtest_mark
+connect "friend"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend' unable to authenticate to service\n"
+fi
+
 # Print results.
 set +x
 passed=1
