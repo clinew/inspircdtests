@@ -327,34 +327,34 @@ fi
 #         /   \                                     /         \
 # localhost   signing_ca -                  fake_localhost   fake_signing_ca
 #             /    |      \                                   /
-#         admin   friend   friend_referrer             fake_admin
-#                                |
-#                             referred
+#         admin   friend   referrer                    fake_admin
+#                             |
+#                          referred
 # Give a friend referrer access and then ensure that the referred person is
-# able to connect.  Parity: Ensure that an unauthorized cert can not connect.
+# able to authorize against the service.  Parity: Ensure that an unauthorized
+# certificate is not authorized.
 i=$(($i + 1))
 j=0
 RESULTS[$i]=""
 
 ## Create friend's signing cert.
 set -e
-ca_gen "friend_referrer"
-ca_req_gen "friend_referrer"
-ca_req_submit "signing_ca" "friend_referrer"
-ca_req_sign "signing_ca" "friend_referrer" "v3_referrer"
-ca_req_receive "signing_ca" "friend_referrer"
-ca_crl_gen "friend_referrer"
-cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/friend_referrer/certs/friend_referrer.pem" > "${DIR_SSL}/certfile.pem"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/friend_referrer/crl/friend_referrer.pem" > "${DIR_SSL}/crl.pem"
+ca_gen "referrer"
+ca_req_gen "referrer"
+ca_req_submit "signing_ca" "referrer"
+ca_req_sign "signing_ca" "referrer" "v3_referrer"
+ca_req_receive "signing_ca" "referrer"
+ca_crl_gen "referrer"
+cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/referrer/certs/referrer.pem" > "${DIR_SSL}/certfile.pem"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" > "${DIR_SSL}/crl.pem"
 rc-service inspircd restart
 
 ## Friend creates referred certificate.
 ca_gen "referred"
 ca_req_gen "referred"
-ca_req_submit "friend_referrer" "referred"
-ca_req_sign "friend_referrer" "referred" "v3_client"
-ca_req_receive "friend_referrer" "referred"
-ca_crl_gen "friend_referrer"
+ca_req_submit "referrer" "referred"
+ca_req_sign "referrer" "referred" "v3_client"
+ca_req_receive "referrer" "referred"
 
 ## Test referred certificate.
 set +e
@@ -369,6 +369,69 @@ subtest_mark
 connect "fake_admin"
 if [ $? -ne 1 ]; then
 	RESULTS[$i]+="\t$j: 'fake_admin' not unauthenticated to service\n"
+fi
+
+# Test 04: Revoke a referrer cert.
+#        root_ca
+#         /   \
+# localhost   signing_ca ------------
+#             /    |      \          \
+#         admin   friend   referrer   referrer_bad
+#                             |            |
+#                          referred   referred_bad
+# Give a friend referrer access but then revoke their referrer access and
+# ensure that their referred users are unauthorized.  Parity: Ensure another
+# friend's referred users are still able authorized by the service.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Create bad referrer certificate.
+set -e
+ca_gen "referrer_bad"
+ca_req_gen "referrer_bad"
+ca_req_submit "signing_ca" "referrer_bad"
+ca_req_sign "signing_ca" "referrer_bad" "v3_referrer"
+ca_req_receive "signing_ca" "referrer_bad"
+ca_crl_gen "referrer_bad"
+cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/referrer/certs/referrer.pem" "${DIR_SSL}/referrer_bad/certs/referrer_bad.pem" > "${DIR_SSL}/certfile.pem"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Bad referrer creates a bad referred user.
+ca_gen "referred_bad"
+ca_req_gen "referred_bad"
+ca_req_submit "referrer_bad" "referred_bad"
+ca_req_sign "referrer_bad" "referred_bad"
+ca_req_receive "referrer_bad" "referred_bad"
+
+## Test the bad referred user is authorized.
+set +e
+subtest_mark
+connect "referred_bad"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred_bad' not authorized by service\n"
+fi
+
+## Revoke the bad referrer certificate.
+set -e
+ca_revoke "signing_ca" "referrer_bad"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Test the bad referred user is unauthorized.
+set +e
+subtest_mark
+connect "referred_bad"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'referred_bad' not unauthorized by service\n"
+fi
+
+## Test the (not bad) referred user is authorized.
+subtest_mark
+connect "referred"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred' not authorized by service\n"
 fi
 
 # Print results.
