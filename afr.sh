@@ -434,6 +434,103 @@ if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: 'referred' not authorized by service\n"
 fi
 
+# Test -01: Indirect CRL
+#        root_ca -----------------------
+#         /   \                         \
+# localhost   signing_ca_indirectcrl     crl_ca
+#             /           \
+#        friend_indirect   friend_bad_indirect
+# Testing indirect CRL support in OpenSSL.
+# FIXME: It doesn't work.  There doesn't seem to be a way to add in the
+#        "Certificate Issuer" extension as per RFC 5280 section 5.3.3.  In
+#        addition it's not clear how to specify the CRL issuer in InspIRCd;
+#        it's '-untrusted crl_ca/certs/crl_ca.pem' in the OpenSSL 'verify'
+#        command.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Create a signing CA with an indirect CRL.
+set -e
+ca_gen "signing_ca_indirectcrl"
+ca_req_gen "signing_ca_indirectcrl"
+ca_req_submit "root_ca" "signing_ca_indirectcrl"
+ca_req_sign "root_ca" "signing_ca_indirectcrl"
+ca_req_receive "root_ca" "signing_ca_indirectcrl"
+ca_crl_gen "signing_ca_indirectcrl"
+
+## Create the indirect CRL CA.
+ca_gen "crl_ca"
+ca_req_gen "crl_ca"
+ca_req_submit "root_ca" "crl_ca"
+ca_req_sign "root_ca" "crl_ca" "crl_ca"
+ca_req_receive "root_ca" "crl_ca"
+
+## Create the friend authorized by the indirect CRL signing CA.
+ca_gen "friend_indirect"
+ca_req_gen "friend_indirect"
+ca_req_submit "signing_ca_indirectcrl" "friend_indirect"
+ca_req_sign "signing_ca_indirectcrl" "friend_indirect" "indirect"
+ca_req_receive "signing_ca_indirectcrl" "friend_indirect"
+
+## Create the to-be-revoked friend authorized by the indirect CRL signing CA.
+ca_gen "friend_bad_indirect"
+ca_req_gen "friend_bad_indirect"
+ca_req_submit "signing_ca_indirectcrl" "friend_bad_indirect"
+ca_req_sign "signing_ca_indirectcrl" "friend_bad_indirect" "indirect"
+ca_req_receive "signing_ca_indirectcrl" "friend_bad_indirect"
+
+# Generate initial CRL.
+pushd "crl_ca"
+openssl ca -gencrl -config openssl.cnf -name crl_conf -crlexts crl_ext2 -out "../signing_ca_indirectcrl/crl/signing_ca_indirectcrl.pem"
+popd
+
+## Assemble certificate data.
+cat "${DIR_SSL}/crl_ca/certs/crl_ca.pem" "${DIR_SSL}/signing_ca_indirectcrl/certs/signing_ca_indirectcrl.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" > "${DIR_SSL}/certfile.pem"
+cat "${DIR_SSL}/signing_ca_indirectcrl/crl/signing_ca_indirectcrl.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Test 'friend_indirect' is authorized
+set +e
+subtest_mark
+connect "friend_indirect"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend_indirect' not authorized pre-revoke\n"
+fi
+
+## Test 'friend_bad_indirect' is authorized
+subtest_mark
+connect "friend_bad_indirect"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend_bad_indirect' not authorized pre-revoke\n"
+fi
+
+## Revoke 'friend_bad_indirect'
+set -e
+pushd "signing_ca_indirectcrl"
+openssl ca -config openssl.cnf -keyfile "private/signing_ca_indirectcrl.pem" -cert "certs/signing_ca_indirectcrl.pem" -revoke "certs/friend_bad_indirect.pem"
+popd
+pushd "crl_ca"
+openssl ca -gencrl -config openssl.cnf -name crl_conf -crlexts crl_ext2 -out "../signing_ca_indirectcrl/crl/signing_ca_indirectcrl.pem"
+popd
+cat "${DIR_SSL}/signing_ca_indirectcrl/crl/signing_ca_indirectcrl.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Test 'friend_indirect' is still authorized
+set +e
+subtest_mark
+connect "friend_indirect"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'friend_indirect' not authorized post-revoke\n"
+fi
+
+## Test 'friend_bad_indirect' is now unauthorized
+subtest_mark
+connect "friend_bad_indirect"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'friend_bad_indirect' was authorized post-revoke\n"
+fi
+
 # Print results.
 set +x
 passed=1

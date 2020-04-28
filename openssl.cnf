@@ -131,3 +131,56 @@ extendedKeyUsage = critical,clientAuth
 [ crl_ext ]
 authorityKeyIdentifier=keyid:always
 
+# Test for an indirect CRL CA.
+[ crl_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+keyUsage = critical,cRLSign
+basicConstraints = critical,CA:FALSE
+
+# Test for a client certificate with an indirect CRL.
+[ indirect ]
+#subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:FALSE
+extendedKeyUsage = critical,clientAuth
+crlDistributionPoints = critical,crl_ca_dp
+
+# Distribution point for the indirect CRL CA.
+[ crl_ca_dp ]
+fullname = URI:http://example.com/example.crl # FIXME: Remove dummy value
+CRLissuer = dirName: crl_ca_dp_dn
+
+# DN of the indirect CRL CA.
+[ crl_ca_dp_dn ]
+CN=crl_ca
+
+# Configuration for indirect CRL CA.
+[ crl_conf ]
+dir = .
+certificate = $dir/certs/crl_ca.pem
+private_key = $dir/private/crl_ca.pem
+database = $dir/../signing_ca_indirectcrl/index.txt
+crlnumber = $dir/../signing_ca_indirectcrl/crlnumber
+default_crl_days	= 30
+default_md 	= sha512
+
+# CRL extensions or something...
+[ crl_ext2 ]
+authorityKeyIdentifier = keyid:always,issuer
+#issuerAltName = dirName: ugh
+issuingDistributionPoint = critical, @crl_idp
+
+# Doesn't seem to help identify the CRL certificate issuer for a revoked cert,
+# either.
+#[ ugh ]
+#CN=signing_ca_indirectcrl
+
+# CRL Issuing Distribution Point
+# FIXME: This doesn't work because... ?
+#   No way to specify "Certificate Issuer" for each certificate revoked?
+#   Something about CRL issuer and CA names needing to be the same?
+#   http://openssl.6102.n7.nabble.com/Re-openssl-org-3097-Incorrect-revocation-status-with-indirect-CRL-td47482.html
+[ crl_idp ]
+fullname = URI:http://example.com/example.crl
+indirectCRL = TRUE
