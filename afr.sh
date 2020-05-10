@@ -376,7 +376,7 @@ fi
 #         /   \
 # localhost   signing_ca ------------
 #             /    |      \          \
-#         admin   friend   referrer   referrer_bad
+#         admin   friend   referrer   referrer_bad (R)
 #                             |            |
 #                          referred   referred_bad
 # Give a friend referrer access but then revoke their referrer access and
@@ -433,6 +433,75 @@ connect "referred"
 if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: 'referred' not authorized by service\n"
 fi
+
+# Test 05: Indirectly revoke a referrer cert.
+#        root_ca
+#         /   \
+# localhost   signing_ca -
+#             /    |      \
+#         admin   friend   referrer -
+#                             |      \
+#                          referred   referred_bad_indirect (R)
+# A friend invites a referred (referred_bad_indirect) user, but the admin
+# decides to revoke the referred user without revoking the friend's referrer
+# certificate.  Parity: Ensure that other users the friend has invited are
+# still authorized.
+# FIXME: There doesn't appear to be a way to issue an indrect revocation via
+# the OpenSSL command-line utilities.  Nor does InspIRCd appear to offer a way
+# to ban a user's certificate globally via a fingerprint; at most there is a
+# way to ban users from a specific channel with the '+b z:${fingerprint}'
+# extban.  As a workaround this test currently logs in as the 'admin' user,
+# creates an unregistered channel '#temp', sets the 'extban' for the
+# 'referred_bad_indirect' user's certificate, then attempts to join the channel
+# with said certificate.  Parity: Able to join the channel as 'referred'.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Create the bad referrer certificate.
+set -e
+ca_gen "referred_bad_indirect"
+ca_req_gen "referred_bad_indirect"
+ca_req_submit "referrer" "referred_bad_indirect"
+ca_req_sign "referrer" "referred_bad_indirect" "v3_client"
+ca_req_receive "referrer" "referred_bad_indirect"
+
+## Test that the bad referred user is authorized.
+set +e
+subtest_mark
+connect "referred_bad_indirect"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred_bad_indirect' not authorized by service pre-revocation\n"
+fi
+
+## Obtain bad referred fingerprint for banning.
+set -e
+fingerprint=$(openssl x509 -in "referred_bad_indirect/certs/referred_bad_indirect.pem" -fingerprint -sha256 -noout | cut -d '=' -f 2 | sed 's/://g' | sed 'y/ABCDEF/abcdef/')
+
+## Join the temporary channel and set the ban on it.
+## Yes, this is all a terrible hack and full of race conditions.
+(echo -e "USER a hostess servant rjhacker\nNICK admin"; sleep 3; echo -e "JOIN #temp\nMODE #temp +b z:${fingerprint}"; sleep 40; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "admin/certs/admin.pem" -key "admin/private/admin.pem" -connect localhost:6697 -ign_eof &
+
+## Attempt to join the temporary channel as the banned 'referred_bad_indirect'.
+subtest_mark
+output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred_bad_indirect"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "referred_bad_indirect/certs/referred_bad_indirect.pem" -key "referred_bad_indirect/private/referred_bad_indirect.pem" -connect localhost:6697 -ign_eof)
+set +e
+if ! echo "${output}" | grep "#temp :Cannot join channel (you're banned)"; then
+	RESULTS[$i]+="\t$j: 'referred_bad_indirect' not banned from '#temp'\n"
+fi
+
+## Attempt to join the temporary channel as 'referred'.
+set -e
+subtest_mark
+output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "referred/certs/referred.pem" -key "referred/private/referred.pem" -connect localhost:6697 -ign_eof)
+set +e
+if echo "${output}" | grep "#temp :Cannot join channel (you're banned)"; then
+	RESULTS[$i]+="\t$j: 'referred' banned from '#temp'\n"
+fi
+set -e
+
+## Wait for connect 'admin' to quit.
+wait
 
 # Print results.
 set +x
