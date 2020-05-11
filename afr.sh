@@ -556,6 +556,57 @@ if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: 'referred' not authorized post-revocation\n"
 fi
 
+# Test 07: Friend revokes their client certificate.
+#        root_ca
+#         /   \
+# localhost   signing_ca -
+#             /    |      \
+#         admin   friend   friend_bad2 (R)
+# A friend finds it necessary to revoke their own client certificate (perhaps
+# a private key compromise).  Ensure that the friend can do so and thus becomes
+# unauthorized.  Parity: Other clients can still connect.
+# TODO: There doesn't appear to be a way for clients to revoke their own
+# certificates, hence the issuer will have to do the revocation.  With a proper
+# AFR network protocol in place, this could actually test having the client
+# request a revocation from the issuer; right now, this would just be a repeat
+# of Test #02, so don't even bother to implement it.
+i=$(($i + 1))
+j=0
+RESULTS[$i]="\tNot implemented\n"
+
+# Test 08: Referrer revokes their referring certificate.
+#        root_ca
+#         /   \
+# localhost   signing_ca ------------
+#             /    |      \          \
+#         admin   friend   referrer   referrer_bad2 (R)
+#                             |            |
+#                          referred   referred_bad3
+# A friend needs to revoke their referrer certificate.  Ensure that any
+# referred users from their revoked certificate are not authorized.  Parity:
+# Ensure that users referred by a non-revoked certificate are authorized.
+# TODO: Same caveats as the previous test, except it'd be a repeat of Test #04.
+i=$(($i + 1))
+j=0
+RESULTS[$i]="\tNot implemented\n"
+
+# Test 09: Referred user revokes their client certificate.
+#        root_ca
+#         /   \
+# localhost   signing_ca -
+#             /    |      \
+#         admin   friend   referrer -----
+#                             |          \
+#                          referred   referred_bad4 (R)
+# A referred user needs to revoke their client certificate.  Ensure that the
+# revoked referred user is unauthorized.  Parity: Ensure that another, non-
+# revoked referred user is authorized.
+# TODO: Same caveats as the previous two tests, except it'd be a repeat of Test
+# #05 or #06.
+i=$(($i + 1))
+j=0
+RESULTS[$i]="\tNot implemented\n"
+
 # Print results.
 set +x
 passed=1
