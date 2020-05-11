@@ -458,7 +458,7 @@ i=$(($i + 1))
 j=0
 RESULTS[$i]=""
 
-## Create the bad referrer certificate.
+## Create the bad referred certificate.
 set -e
 ca_gen "referred_bad_indirect"
 ca_req_gen "referred_bad_indirect"
@@ -502,6 +502,59 @@ set -e
 
 ## Wait for connect 'admin' to quit.
 wait
+
+# Test 06: Referrer revokes one of their referred users.
+#        root_ca
+#         /   \
+# localhost   signing_ca -
+#             /    |      \
+#         admin   friend   referrer -
+#                             |      \
+#                          referred   referred_bad2 (R)
+# A friend invites a referred (referred_bad2) user, but then decides to revoke
+# the referred user's authorization.  Parity: Ensure another referred user is
+# still authorized.
+# TODO: How will this interact with IndirectCRLs?
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Create the bad referred2 certificate.
+set -e
+ca_gen "referred_bad2"
+ca_req_gen "referred_bad2"
+ca_req_submit "referrer" "referred_bad2"
+ca_req_sign "referrer" "referred_bad2" "v3_client"
+ca_req_receive "referrer" "referred_bad2"
+
+## Test that bad referred2 is authorized.
+set +e
+subtest_mark
+connect "referred_bad2"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred_bad2' not authorized pre-revocation\n"
+fi
+
+## Ban the referred user.
+set -e
+ca_revoke "referrer" "referred_bad2"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+rc-service inspircd restart
+
+## Test that bad referred2 is now unauthorized.
+set +e
+subtest_mark
+connect "referred_bad2"
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: 'referred_bad2' not unauthorized post-revocation\n"
+fi
+
+## Test that referred is still authorized.
+subtest_mark
+connect "referred"
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: 'referred' not authorized post-revocation\n"
+fi
 
 # Print results.
 set +x
