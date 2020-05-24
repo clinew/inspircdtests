@@ -25,7 +25,7 @@ DIR_HOME="${HOME}/.inspircdtests"
 # Home dir for the InspIRCd configuration.
 DIR_IRCD="/etc/inspircd"
 # Home dir for the OpenSSL files.
-DIR_SSL="/etc/ssl/frostsnow"
+DIR_SSL="/var/lib/afr/inspircdtests"
 # Array to store test results in.
 RESULTS=()
 
@@ -100,6 +100,8 @@ trap "restore" EXIT
 # Set-up.
 mkdir -p "${DIR_SSL}"
 cp "openssl.cnf" "${DIR_SSL}/openssl.cnf"
+cp "afr.conf" "${DIR_SSL}/afr.conf"
+cp "afr_fake.conf" "${DIR_SSL}/afr_fake.conf"
 pushd "${DIR_SSL}"
 
 # Test 00: Initialize.
@@ -116,25 +118,8 @@ j=0
 RESULTS[$i]=""
 echo "Test $i: Initialize"
 
-## Initialize root certificate.
-ca_gen "root_ca"
-ca_selfsign "root_ca"
-ca_crl_gen "root_ca"
-
-## Initialize service certificate.
-ca_gen "localhost"
-ca_req_gen "localhost"
-ca_req_submit "root_ca" "localhost"
-ca_req_sign "root_ca" "localhost" "v3_service"
-ca_req_receive "root_ca" "localhost"
-
-## Initialize signing certificate.
-ca_gen "signing_ca"
-ca_req_gen "signing_ca"
-ca_req_submit "root_ca" "signing_ca"
-ca_req_sign "root_ca" "signing_ca" "v3_signing"
-ca_req_receive "root_ca" "signing_ca"
-ca_crl_gen "signing_ca"
+## Initialize AFR root CA.
+afr -c afr.conf init
 
 ## Initialize admin's client certificate.
 ca_gen "admin"
@@ -143,25 +128,8 @@ ca_req_submit "signing_ca" "admin"
 ca_req_sign "signing_ca" "admin" "v3_client"
 ca_req_receive "signing_ca" "admin"
 
-## Initialize fake root certificate.
-ca_gen "fake_root_ca"
-ca_selfsign "fake_root_ca"
-ca_crl_gen "fake_root_ca"
-
-## Initialize fake service certificate.
-ca_gen "fake_localhost"
-ca_req_gen "fake_localhost"
-ca_req_submit "fake_root_ca" "fake_localhost"
-ca_req_sign "fake_root_ca" "fake_localhost" "v3_service"
-ca_req_receive "fake_root_ca" "fake_localhost"
-
-## Initialize fake signing certificate.
-ca_gen "fake_signing_ca"
-ca_req_gen "fake_signing_ca"
-ca_req_submit "fake_root_ca" "fake_signing_ca"
-ca_req_sign "fake_root_ca" "fake_signing_ca" "v3_signing"
-ca_req_receive "fake_root_ca" "fake_signing_ca"
-ca_crl_gen "fake_signing_ca"
+## Initialize AFR fake root CA.
+afr -c afr_fake.conf init
 
 ## Initialize fake admin's client certificate.
 ca_gen "fake_admin"
