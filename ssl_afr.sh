@@ -35,7 +35,7 @@ RESULTS=()
 # access or not.
 connect() {
 	name=$1
-	output=$( (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 3; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/CAfile.pem" -cert "${name}/certs/${name}.pem" -key "${name}/private/${name}.pem" -connect localhost:6697 -ign_eof)
+	output=$( (echo -e "USER a hostess servant rjhacker\nNICK a"; sleep 3; echo "QUIT") | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -cert "${name}/certs/${name}.pem" -key "${name}/private/${name}.pem" -connect localhost:6697 -ign_eof)
 	if echo "${output}" | grep "You are connected"; then
 		echo "Access granted to '${name}'"
 		return 0
@@ -136,13 +136,6 @@ ca_req_gen "fake_admin"
 afr -c afr_fake.conf sign-friend "fake_admin/csr/fake_admin.pem" "fake_admin"
 ca_req_receive "fake_signing_ca" "fake_admin"
 
-## Assemble certificate data for the client.
-cat "${DIR_SSL}/localhost/certs/localhost.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" > "${DIR_SSL}/CAfile.pem"
-cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" > "${DIR_SSL}/certfile.pem"
-cat "${DIR_SSL}/fake_localhost/certs/fake_localhost.pem" "${DIR_SSL}/fake_root_ca/certs/fake_root_ca.pem" > "${DIR_SSL}/fake_CAfile.pem"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
-cat "${DIR_SSL}/fake_signing_ca/crl/fake_signing_ca.pem" "${DIR_SSL}/fake_root_ca/crl/fake_root_ca.pem" > "${DIR_SSL}/fake_crl.pem"
-
 ## Configure InspIRCd to use the fake server.
 chown -R "root:inspircd" "${DIR_SSL}"
 sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/fake_localhost/certs/fake_localhost.pem!" "${DIR_IRCD}/modules.conf"
@@ -153,12 +146,12 @@ rc-service inspircd restart
 ## Test client successfully rejects fake server.
 set +e
 subtest_mark
-(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/CAfile.pem" -connect localhost:6697
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
 if [ $? -ne 1 ]; then
 	RESULTS[$i]+="\t$j: Client authenticated illegitimate service\n"
 fi
 subtest_mark
-(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_CAfile.pem" -connect localhost:6697
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_certs.pem" -connect localhost:6697
 if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: Illegitimate service probably not set-up properly\n"
 fi
@@ -166,8 +159,8 @@ set -e
 
 ## Configure InspIRCd to use both the service certificate, the signing
 ## certificate, and the CRL file.
-sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/certfile.pem!" "${DIR_IRCD}/modules.conf"
-sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/CAfile.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/ca.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs.pem!" "${DIR_IRCD}/modules.conf"
 chmod 0740 "${DIR_SSL}/localhost/private/localhost.pem"
 sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/localhost/private/localhost.pem!" "${DIR_IRCD}/modules.conf"
 sed -ri "s!#*(crlfile=\")[^\"]+!\1${DIR_SSL}/crl.pem!" "${DIR_IRCD}/modules.conf"
@@ -178,12 +171,12 @@ rc-service inspircd restart
 ## Test client successfully authenticates service.
 set +e
 subtest_mark
-(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/CAfile.pem" -connect localhost:6697
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
 if [ $? -ne 0 ]; then
 	RESULTS[$i]+="\t$j: Client unable to authenticate service\n"
 fi
 subtest_mark
-(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_CAfile.pem" -connect localhost:6697
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/fake_certs.pem" -connect localhost:6697
 if [ $? -ne 1 ]; then
 	RESULTS[$i]+="\t$j: Client authenticated despite illlegitimate certificate\n"
 fi
@@ -268,7 +261,6 @@ fi
 ## Revoke the certificate of 'friend_bad'.
 set -e
 afr -c afr.conf revoke-friend "friend_bad"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
 rc-service inspircd restart
 
 ## Test authentication failure for revoked 'friend_bad'.
@@ -291,7 +283,7 @@ fi
 #         /   \                                     /         \
 # localhost   signing_ca -                  fake_localhost   fake_signing_ca
 #             /    |      \                                   /
-#         admin   friend   referrer                    fake_admin
+#         admin   friend   friend.ref                    fake_admin
 #                             |
 #                          referred
 # Give a friend referrer access and then ensure that the referred person is
@@ -303,22 +295,20 @@ RESULTS[$i]=""
 
 ## Create friend's signing cert.
 set -e
-ca_gen "referrer"
-ca_req_gen "referrer"
-ca_req_submit "signing_ca" "referrer"
-ca_req_sign "signing_ca" "referrer" "v3_referrer"
-ca_req_receive "signing_ca" "referrer"
-ca_crl_gen "referrer"
-cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/referrer/certs/referrer.pem" > "${DIR_SSL}/certfile.pem"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" > "${DIR_SSL}/crl.pem"
+ca_gen "friend.ref"
+ca_req_gen "friend.ref"
+afr -c afr.conf sign-referrer "friend.ref/csr/friend.ref.pem" "friend"
+ca_req_receive "signing_ca" "friend.ref"
+ca_crl_gen "friend.ref"
+afr -c afr.conf receive-crl "friend.ref/crl/friend.ref.pem" "friend"
 rc-service inspircd restart
 
 ## Friend creates referred certificate.
 ca_gen "referred"
 ca_req_gen "referred"
-ca_req_submit "referrer" "referred"
-ca_req_sign "referrer" "referred" "v3_client"
-ca_req_receive "referrer" "referred"
+ca_req_submit "friend.ref" "referred"
+ca_req_sign "friend.ref" "referred" "v3_client"
+ca_req_receive "friend.ref" "referred"
 
 ## Test referred certificate.
 set +e
@@ -338,11 +328,11 @@ fi
 # Test 04: Revoke a referrer cert.
 #        root_ca
 #         /   \
-# localhost   signing_ca ------------
-#             /    |      \          \
-#         admin   friend   referrer   referrer_bad (R)
-#                             |            |
-#                          referred   referred_bad
+# localhost   signing_ca -------------------------------
+#             /    |      \            \                \
+#         admin   friend   friend.ref   friend_bad_ref   friend_bad_ref.ref (R)
+#                             |                                 |
+#                          referred                         referred_bad
 # Give a friend referrer access but then revoke their referrer access and
 # ensure that their referred users are unauthorized.  Parity: Ensure another
 # friend's referred users are still able authorized by the service.
@@ -350,24 +340,28 @@ i=$(($i + 1))
 j=0
 RESULTS[$i]=""
 
-## Create bad referrer certificate.
+## Create friend's certificate for the bad referrer.
 set -e
-ca_gen "referrer_bad"
-ca_req_gen "referrer_bad"
-ca_req_submit "signing_ca" "referrer_bad"
-ca_req_sign "signing_ca" "referrer_bad" "v3_referrer"
-ca_req_receive "signing_ca" "referrer_bad"
-ca_crl_gen "referrer_bad"
-cat "${DIR_SSL}/signing_ca/certs/signing_ca.pem" "${DIR_SSL}/root_ca/certs/root_ca.pem" "${DIR_SSL}/referrer/certs/referrer.pem" "${DIR_SSL}/referrer_bad/certs/referrer_bad.pem" > "${DIR_SSL}/certfile.pem"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+ca_gen "friend_bad_ref"
+ca_req_gen "friend_bad_ref"
+afr -c afr.conf sign-friend "friend_bad_ref/csr/friend_bad_ref.pem" "friend_bad_ref"
+ca_req_receive "signing_ca" "friend_bad_ref"
+
+## Create bad referrer certificate.
+ca_gen "friend_bad_ref.ref"
+ca_req_gen "friend_bad_ref.ref"
+afr -c afr.conf sign-referrer "friend_bad_ref.ref/csr/friend_bad_ref.ref.pem" "friend_bad_ref"
+ca_req_receive "signing_ca" "friend_bad_ref.ref"
+ca_crl_gen "friend_bad_ref.ref"
+afr -c afr.conf receive-crl "friend_bad_ref.ref/crl/friend_bad_ref.ref.pem" "friend_bad_ref"
 rc-service inspircd restart
 
 ## Bad referrer creates a bad referred user.
 ca_gen "referred_bad"
 ca_req_gen "referred_bad"
-ca_req_submit "referrer_bad" "referred_bad"
-ca_req_sign "referrer_bad" "referred_bad" "v3_client"
-ca_req_receive "referrer_bad" "referred_bad"
+ca_req_submit "friend_bad_ref.ref" "referred_bad"
+ca_req_sign "friend_bad_ref.ref" "referred_bad" "v3_client"
+ca_req_receive "friend_bad_ref.ref" "referred_bad"
 
 ## Test the bad referred user is authorized.
 set +e
@@ -379,8 +373,8 @@ fi
 
 ## Revoke the bad referrer certificate.
 set -e
-ca_revoke "signing_ca" "referrer_bad"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+ca_revoke "signing_ca" "friend_bad_ref.ref"
+cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/friend.ref/crl/friend.ref.pem" "${DIR_SSL}/friend_bad_ref.ref/crl/friend_bad_ref.ref.pem" > "${DIR_SSL}/crl.pem"
 rc-service inspircd restart
 
 ## Test the bad referred user is unauthorized.
@@ -403,9 +397,9 @@ fi
 #         /   \
 # localhost   signing_ca -
 #             /    |      \
-#         admin   friend   referrer -
-#                             |      \
-#                          referred   referred_bad_indirect (R)
+#         admin   friend   friend.ref -
+#                             |        \
+#                          referred     referred_bad_indirect (R)
 # A friend invites a referred (referred_bad_indirect) user, but the admin
 # decides to revoke the referred user without revoking the friend's referrer
 # certificate.  Parity: Ensure that other users the friend has invited are
@@ -426,9 +420,9 @@ RESULTS[$i]=""
 set -e
 ca_gen "referred_bad_indirect"
 ca_req_gen "referred_bad_indirect"
-ca_req_submit "referrer" "referred_bad_indirect"
-ca_req_sign "referrer" "referred_bad_indirect" "v3_client"
-ca_req_receive "referrer" "referred_bad_indirect"
+ca_req_submit "friend.ref" "referred_bad_indirect"
+ca_req_sign "friend.ref" "referred_bad_indirect" "v3_client"
+ca_req_receive "friend.ref" "referred_bad_indirect"
 
 ## Test that the bad referred user is authorized.
 set +e
@@ -444,11 +438,11 @@ fingerprint=$(openssl x509 -in "referred_bad_indirect/certs/referred_bad_indirec
 
 ## Join the temporary channel and set the ban on it.
 ## Yes, this is all a terrible hack and full of race conditions.
-(echo -e "USER a hostess servant rjhacker\nNICK admin"; sleep 3; echo -e "JOIN #temp\nMODE #temp +b z:${fingerprint}"; sleep 40; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "admin/certs/admin.pem" -key "admin/private/admin.pem" -connect localhost:6697 -ign_eof &
+(echo -e "USER a hostess servant rjhacker\nNICK admin"; sleep 3; echo -e "JOIN #temp\nMODE #temp +b z:${fingerprint}"; sleep 40; echo "QUIT") | openssl s_client -verify_return_error -CAfile "certs.pem" -cert "admin/certs/admin.pem" -key "admin/private/admin.pem" -connect localhost:6697 -ign_eof &
 
 ## Attempt to join the temporary channel as the banned 'referred_bad_indirect'.
 subtest_mark
-output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred_bad_indirect"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "referred_bad_indirect/certs/referred_bad_indirect.pem" -key "referred_bad_indirect/private/referred_bad_indirect.pem" -connect localhost:6697 -ign_eof)
+output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred_bad_indirect"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "certs.pem" -cert "referred_bad_indirect/certs/referred_bad_indirect.pem" -key "referred_bad_indirect/private/referred_bad_indirect.pem" -connect localhost:6697 -ign_eof)
 set +e
 if ! echo "${output}" | grep "#temp :Cannot join channel (you're banned)"; then
 	RESULTS[$i]+="\t$j: 'referred_bad_indirect' not banned from '#temp'\n"
@@ -457,7 +451,7 @@ fi
 ## Attempt to join the temporary channel as 'referred'.
 set -e
 subtest_mark
-output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "CAfile.pem" -cert "referred/certs/referred.pem" -key "referred/private/referred.pem" -connect localhost:6697 -ign_eof)
+output=$( (echo -e "USER a hostess servant rjhacker\nNICK referred"; sleep 3; echo -e "JOIN #temp"; sleep 5; echo "QUIT") | openssl s_client -verify_return_error -CAfile "certs.pem" -cert "referred/certs/referred.pem" -key "referred/private/referred.pem" -connect localhost:6697 -ign_eof)
 set +e
 if echo "${output}" | grep "#temp :Cannot join channel (you're banned)"; then
 	RESULTS[$i]+="\t$j: 'referred' banned from '#temp'\n"
@@ -472,9 +466,9 @@ wait
 #         /   \
 # localhost   signing_ca -
 #             /    |      \
-#         admin   friend   referrer -
-#                             |      \
-#                          referred   referred_bad2 (R)
+#         admin   friend   friend.ref -
+#                             |        \
+#                          referred     referred_bad2 (R)
 # A friend invites a referred (referred_bad2) user, but then decides to revoke
 # the referred user's authorization.  Parity: Ensure another referred user is
 # still authorized.
@@ -487,9 +481,9 @@ RESULTS[$i]=""
 set -e
 ca_gen "referred_bad2"
 ca_req_gen "referred_bad2"
-ca_req_submit "referrer" "referred_bad2"
-ca_req_sign "referrer" "referred_bad2" "v3_client"
-ca_req_receive "referrer" "referred_bad2"
+ca_req_submit "friend.ref" "referred_bad2"
+ca_req_sign "friend.ref" "referred_bad2" "v3_client"
+ca_req_receive "friend.ref" "referred_bad2"
 
 ## Test that bad referred2 is authorized.
 set +e
@@ -501,8 +495,8 @@ fi
 
 ## Ban the referred user.
 set -e
-ca_revoke "referrer" "referred_bad2"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/referrer/crl/referrer.pem" "${DIR_SSL}/referrer_bad/crl/referrer_bad.pem" > "${DIR_SSL}/crl.pem"
+ca_revoke "friend.ref" "referred_bad2"
+afr -c afr.conf receive-crl "friend.ref/crl/friend.ref.pem" "friend"
 rc-service inspircd restart
 
 ## Test that bad referred2 is now unauthorized.
@@ -541,11 +535,11 @@ RESULTS[$i]="\tNot implemented\n"
 # Test 08: Referrer revokes their referring certificate.
 #        root_ca
 #         /   \
-# localhost   signing_ca ------------
-#             /    |      \          \
-#         admin   friend   referrer   referrer_bad2 (R)
+# localhost   signing_ca --------------
+#             /    |      \            \
+#         admin   friend   friend.ref   referrer_bad2 (R)
 #                             |            |
-#                          referred   referred_bad3
+#                          referred     referred_bad3
 # A friend needs to revoke their referrer certificate.  Ensure that any
 # referred users from their revoked certificate are not authorized.  Parity:
 # Ensure that users referred by a non-revoked certificate are authorized.
@@ -559,9 +553,9 @@ RESULTS[$i]="\tNot implemented\n"
 #         /   \
 # localhost   signing_ca -
 #             /    |      \
-#         admin   friend   referrer -----
-#                             |          \
-#                          referred   referred_bad4 (R)
+#         admin   friend   friend.ref -----
+#                             |            \
+#                          referred     referred_bad4 (R)
 # A referred user needs to revoke their client certificate.  Ensure that the
 # revoked referred user is unauthorized.  Parity: Ensure that another, non-
 # revoked referred user is authorized.
