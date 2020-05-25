@@ -124,8 +124,7 @@ afr -c afr.conf init
 ## Initialize admin's client certificate.
 ca_gen "admin"
 ca_req_gen "admin"
-ca_req_submit "signing_ca" "admin"
-ca_req_sign "signing_ca" "admin" "v3_client"
+afr -c afr.conf sign-friend "admin/csr/admin.pem" "admin"
 ca_req_receive "signing_ca" "admin"
 
 ## Initialize AFR fake root CA.
@@ -134,8 +133,7 @@ afr -c afr_fake.conf init
 ## Initialize fake admin's client certificate.
 ca_gen "fake_admin"
 ca_req_gen "fake_admin"
-ca_req_submit "fake_signing_ca" "fake_admin"
-ca_req_sign "fake_signing_ca" "fake_admin" "v3_client"
+afr -c afr_fake.conf sign-friend "fake_admin/csr/fake_admin.pem" "fake_admin"
 ca_req_receive "fake_signing_ca" "fake_admin"
 
 ## Assemble certificate data for the client.
@@ -221,8 +219,7 @@ RESULTS[$i]=""
 set -e
 ca_gen "friend"
 ca_req_gen "friend"
-ca_req_submit "signing_ca" "friend"
-ca_req_sign "signing_ca" "friend" "v3_client"
+afr -c afr.conf sign-friend "friend/csr/friend.pem" "friend"
 ca_req_receive "signing_ca" "friend"
 
 ## Test authenticating to the server as "friend".
@@ -257,8 +254,7 @@ RESULTS[$i]=""
 set -e
 ca_gen "friend_bad"
 ca_req_gen "friend_bad"
-ca_req_submit "signing_ca" "friend_bad"
-ca_req_sign "signing_ca" "friend_bad" "v3_client"
+afr -c afr.conf sign-friend "friend_bad/csr/friend_bad.pem" "friend_bad"
 ca_req_receive "signing_ca" "friend_bad"
 
 ## Test authenticating to the server as 'friend_bad'.
@@ -370,7 +366,7 @@ rc-service inspircd restart
 ca_gen "referred_bad"
 ca_req_gen "referred_bad"
 ca_req_submit "referrer_bad" "referred_bad"
-ca_req_sign "referrer_bad" "referred_bad"
+ca_req_sign "referrer_bad" "referred_bad" "v3_client"
 ca_req_receive "referrer_bad" "referred_bad"
 
 ## Test the bad referred user is authorized.
