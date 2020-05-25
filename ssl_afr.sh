@@ -267,7 +267,7 @@ fi
 
 ## Revoke the certificate of 'friend_bad'.
 set -e
-ca_revoke "signing_ca" "friend_bad"
+afr -c afr.conf revoke-friend "friend_bad"
 cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" > "${DIR_SSL}/crl.pem"
 rc-service inspircd restart
 
