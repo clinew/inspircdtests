@@ -496,7 +496,7 @@ fi
 
 ## Ban the referred user.
 set -e
-ca_revoke "friend.ref" "referred_bad2"
+afrc -c friend.conf revoke-referred "referred_bad2"
 afr -c afr.conf receive-crl "friend.ref/crl/friend.ref.pem" "friend"
 rc-service inspircd restart
 
