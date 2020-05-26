@@ -310,9 +310,8 @@ rc-service inspircd restart
 cp afrc.conf referred.conf
 sed -i 's/FIXME/referred/' referred.conf
 afrc -c referred.conf init "referred"
-ca_req_submit "friend.ref" "referred"
-ca_req_sign "friend.ref" "referred" "v3_client"
-ca_req_receive "friend.ref" "referred"
+afrc -c friend.conf sign-referred "referred/csr/referred.pem" "referred"
+afrc -c referred.conf receive-client "friend.ref/certs/referred.pem"
 
 ## Test referred certificate.
 set +e
@@ -363,9 +362,8 @@ rc-service inspircd restart
 cp afrc.conf referred_bad.conf
 sed -i 's/FIXME/referred_bad/' referred_bad.conf
 afrc -c referred_bad.conf init "referred_bad"
-ca_req_submit "friend_bad_ref.ref" "referred_bad"
-ca_req_sign "friend_bad_ref.ref" "referred_bad" "v3_client"
-ca_req_receive "friend_bad_ref.ref" "referred_bad"
+afrc -c friend_bad_ref.conf sign-referred "referred_bad/csr/referred_bad.pem" "referred_bad"
+afrc -c referred_bad.conf receive-client "friend_bad_ref.ref/certs/referred_bad.pem"
 
 ## Test the bad referred user is authorized.
 set +e
@@ -424,9 +422,8 @@ set -e
 cp afrc.conf referred_bad_indirect.conf
 sed -i 's/FIXME/referred_bad_indirect/' referred_bad_indirect.conf
 afrc -c referred_bad_indirect.conf init "referred_bad_indirect"
-ca_req_submit "friend.ref" "referred_bad_indirect"
-ca_req_sign "friend.ref" "referred_bad_indirect" "v3_client"
-ca_req_receive "friend.ref" "referred_bad_indirect"
+afrc -c friend.conf sign-referred "referred_bad_indirect/csr/referred_bad_indirect.pem" "referred_bad_indirect"
+afrc -c referred_bad_indirect.conf receive-client "friend.ref/certs/referred_bad_indirect.pem"
 
 ## Test that the bad referred user is authorized.
 set +e
@@ -486,9 +483,8 @@ set -e
 cp afrc.conf referred_bad2.conf
 sed -i 's/FIXME/referred_bad2/' referred_bad2.conf
 afrc -c referred_bad2.conf init "referred_bad2"
-ca_req_submit "friend.ref" "referred_bad2"
-ca_req_sign "friend.ref" "referred_bad2" "v3_client"
-ca_req_receive "friend.ref" "referred_bad2"
+afrc -c friend.conf sign-referred "referred_bad2/csr/referred_bad2.pem" "referred_bad2"
+afrc -c referred_bad2.conf receive-client "friend.ref/certs/referred_bad2.pem"
 
 ## Test that bad referred2 is authorized.
 set +e
