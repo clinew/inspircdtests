@@ -373,8 +373,7 @@ fi
 
 ## Revoke the bad referrer certificate.
 set -e
-ca_revoke "signing_ca" "friend_bad_ref.ref"
-cat "${DIR_SSL}/signing_ca/crl/signing_ca.pem" "${DIR_SSL}/root_ca/crl/root_ca.pem" "${DIR_SSL}/friend.ref/crl/friend.ref.pem" "${DIR_SSL}/friend_bad_ref.ref/crl/friend_bad_ref.ref.pem" > "${DIR_SSL}/crl.pem"
+afr -c afr.conf revoke-referrer "friend_bad_ref"
 rc-service inspircd restart
 
 ## Test the bad referred user is unauthorized.
