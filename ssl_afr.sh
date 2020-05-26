@@ -300,9 +300,7 @@ RESULTS[$i]=""
 
 ## Create friend's signing cert.
 set -e
-cp afrc.conf friend.ref.conf
-sed -i 's/FIXME/friend.ref/' friend.ref.conf
-afrc -c friend.ref.conf init "friend.ref"
+afrc -c friend.conf request-referrer
 afr -c afr.conf sign-referrer "friend.ref/csr/friend.ref.pem" "friend"
 ca_req_receive "signing_ca" "friend.ref"
 ca_crl_gen "friend.ref"
@@ -356,9 +354,7 @@ afr -c afr.conf sign-friend "friend_bad_ref/csr/friend_bad_ref.pem" "friend_bad_
 afrc -c friend_bad_ref.conf receive-client "signing_ca/certs/friend_bad_ref.pem"
 
 ## Create bad referrer certificate.
-cp afrc.conf friend_bad_ref.ref.conf
-sed -i 's/FIXME/friend_bad_ref.ref/' friend_bad_ref.ref.conf
-afrc -c friend_bad_ref.ref.conf init "friend_bad_ref.ref"
+afrc -c friend_bad_ref.conf request-referrer
 afr -c afr.conf sign-referrer "friend_bad_ref.ref/csr/friend_bad_ref.ref.pem" "friend_bad_ref"
 ca_req_receive "signing_ca" "friend_bad_ref.ref"
 ca_crl_gen "friend_bad_ref.ref"
