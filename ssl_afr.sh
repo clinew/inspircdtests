@@ -127,7 +127,7 @@ cp afrc.conf admin.conf
 sed -i "s/FIXME/admin/" admin.conf
 afrc -c admin.conf init "admin"
 afr -c afr.conf sign-friend "admin/csr/admin.pem" "admin"
-ca_req_receive "signing_ca" "admin"
+afrc -c admin.conf receive-client "signing_ca/certs/admin.pem"
 
 ## Initialize AFR fake root CA.
 afr -c afr_fake.conf init
@@ -137,7 +137,7 @@ cp afrc.conf fake_admin.conf
 sed -i "s/FIXME/fake_admin/" fake_admin.conf
 afrc -c fake_admin.conf init "fake_admin"
 afr -c afr_fake.conf sign-friend "fake_admin/csr/fake_admin.pem" "fake_admin"
-ca_req_receive "fake_signing_ca" "fake_admin"
+afrc -c fake_admin.conf receive-client "fake_signing_ca/certs/fake_admin.pem"
 
 ## Configure InspIRCd to use the fake server.
 chown -R "root:inspircd" "${DIR_SSL}"
@@ -217,7 +217,7 @@ cp afrc.conf friend.conf
 sed -i 's/FIXME/friend/' friend.conf
 afrc -c friend.conf init "friend"
 afr -c afr.conf sign-friend "friend/csr/friend.pem" "friend"
-ca_req_receive "signing_ca" "friend"
+afrc -c friend.conf receive-client "signing_ca/certs/friend.pem"
 
 ## Test authenticating to the server as "friend".
 set +e
@@ -253,7 +253,7 @@ cp afrc.conf friend_bad.conf
 sed -i 's/FIXME/friend_bad/' friend_bad.conf
 afrc -c friend_bad.conf init "friend_bad"
 afr -c afr.conf sign-friend "friend_bad/csr/friend_bad.pem" "friend_bad"
-ca_req_receive "signing_ca" "friend_bad"
+afrc -c friend_bad.conf receive-client "signing_ca/certs/friend_bad.pem"
 
 ## Test authenticating to the server as 'friend_bad'.
 set +e
@@ -353,7 +353,7 @@ cp afrc.conf friend_bad_ref.conf
 sed -i 's/FIXME/friend_bad_ref/' friend_bad_ref.conf
 afrc -c friend_bad_ref.conf init "friend_bad_ref"
 afr -c afr.conf sign-friend "friend_bad_ref/csr/friend_bad_ref.pem" "friend_bad_ref"
-ca_req_receive "signing_ca" "friend_bad_ref"
+afrc -c friend_bad_ref.conf receive-client "signing_ca/certs/friend_bad_ref.pem"
 
 ## Create bad referrer certificate.
 cp afrc.conf friend_bad_ref.ref.conf
