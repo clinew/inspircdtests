@@ -101,6 +101,7 @@ trap "restore" EXIT
 mkdir -p "${DIR_SSL}"
 cp "openssl.cnf" "${DIR_SSL}/openssl.cnf"
 cp "afr.conf" "${DIR_SSL}/afr.conf"
+cp "afrc.conf" "${DIR_SSL}/afrc.conf"
 cp "afr_fake.conf" "${DIR_SSL}/afr_fake.conf"
 pushd "${DIR_SSL}"
 
@@ -122,8 +123,9 @@ echo "Test $i: Initialize"
 afr -c afr.conf init
 
 ## Initialize admin's client certificate.
-ca_gen "admin"
-ca_req_gen "admin"
+cp afrc.conf admin.conf
+sed -i "s/FIXME/admin/" admin.conf
+afrc -c admin.conf init "admin"
 afr -c afr.conf sign-friend "admin/csr/admin.pem" "admin"
 ca_req_receive "signing_ca" "admin"
 
@@ -131,8 +133,9 @@ ca_req_receive "signing_ca" "admin"
 afr -c afr_fake.conf init
 
 ## Initialize fake admin's client certificate.
-ca_gen "fake_admin"
-ca_req_gen "fake_admin"
+cp afrc.conf fake_admin.conf
+sed -i "s/FIXME/fake_admin/" fake_admin.conf
+afrc -c fake_admin.conf init "fake_admin"
 afr -c afr_fake.conf sign-friend "fake_admin/csr/fake_admin.pem" "fake_admin"
 ca_req_receive "fake_signing_ca" "fake_admin"
 
@@ -210,8 +213,9 @@ RESULTS[$i]=""
 
 ## Initialize friend's certificate.
 set -e
-ca_gen "friend"
-ca_req_gen "friend"
+cp afrc.conf friend.conf
+sed -i 's/FIXME/friend/' friend.conf
+afrc -c friend.conf init "friend"
 afr -c afr.conf sign-friend "friend/csr/friend.pem" "friend"
 ca_req_receive "signing_ca" "friend"
 
@@ -245,8 +249,9 @@ RESULTS[$i]=""
 
 ## Initialize bad friend's certificate.
 set -e
-ca_gen "friend_bad"
-ca_req_gen "friend_bad"
+cp afrc.conf friend_bad.conf
+sed -i 's/FIXME/friend_bad/' friend_bad.conf
+afrc -c friend_bad.conf init "friend_bad"
 afr -c afr.conf sign-friend "friend_bad/csr/friend_bad.pem" "friend_bad"
 ca_req_receive "signing_ca" "friend_bad"
 
@@ -295,8 +300,9 @@ RESULTS[$i]=""
 
 ## Create friend's signing cert.
 set -e
-ca_gen "friend.ref"
-ca_req_gen "friend.ref"
+cp afrc.conf friend.ref.conf
+sed -i 's/FIXME/friend.ref/' friend.ref.conf
+afrc -c friend.ref.conf init "friend.ref"
 afr -c afr.conf sign-referrer "friend.ref/csr/friend.ref.pem" "friend"
 ca_req_receive "signing_ca" "friend.ref"
 ca_crl_gen "friend.ref"
@@ -304,8 +310,9 @@ afr -c afr.conf receive-crl "friend.ref/crl/friend.ref.pem" "friend"
 rc-service inspircd restart
 
 ## Friend creates referred certificate.
-ca_gen "referred"
-ca_req_gen "referred"
+cp afrc.conf referred.conf
+sed -i 's/FIXME/referred/' referred.conf
+afrc -c referred.conf init "referred"
 ca_req_submit "friend.ref" "referred"
 ca_req_sign "friend.ref" "referred" "v3_client"
 ca_req_receive "friend.ref" "referred"
@@ -342,14 +349,16 @@ RESULTS[$i]=""
 
 ## Create friend's certificate for the bad referrer.
 set -e
-ca_gen "friend_bad_ref"
-ca_req_gen "friend_bad_ref"
+cp afrc.conf friend_bad_ref.conf
+sed -i 's/FIXME/friend_bad_ref/' friend_bad_ref.conf
+afrc -c friend_bad_ref.conf init "friend_bad_ref"
 afr -c afr.conf sign-friend "friend_bad_ref/csr/friend_bad_ref.pem" "friend_bad_ref"
 ca_req_receive "signing_ca" "friend_bad_ref"
 
 ## Create bad referrer certificate.
-ca_gen "friend_bad_ref.ref"
-ca_req_gen "friend_bad_ref.ref"
+cp afrc.conf friend_bad_ref.ref.conf
+sed -i 's/FIXME/friend_bad_ref.ref/' friend_bad_ref.ref.conf
+afrc -c friend_bad_ref.ref.conf init "friend_bad_ref.ref"
 afr -c afr.conf sign-referrer "friend_bad_ref.ref/csr/friend_bad_ref.ref.pem" "friend_bad_ref"
 ca_req_receive "signing_ca" "friend_bad_ref.ref"
 ca_crl_gen "friend_bad_ref.ref"
@@ -357,8 +366,9 @@ afr -c afr.conf receive-crl "friend_bad_ref.ref/crl/friend_bad_ref.ref.pem" "fri
 rc-service inspircd restart
 
 ## Bad referrer creates a bad referred user.
-ca_gen "referred_bad"
-ca_req_gen "referred_bad"
+cp afrc.conf referred_bad.conf
+sed -i 's/FIXME/referred_bad/' referred_bad.conf
+afrc -c referred_bad.conf init "referred_bad"
 ca_req_submit "friend_bad_ref.ref" "referred_bad"
 ca_req_sign "friend_bad_ref.ref" "referred_bad" "v3_client"
 ca_req_receive "friend_bad_ref.ref" "referred_bad"
@@ -417,8 +427,9 @@ RESULTS[$i]=""
 
 ## Create the bad referred certificate.
 set -e
-ca_gen "referred_bad_indirect"
-ca_req_gen "referred_bad_indirect"
+cp afrc.conf referred_bad_indirect.conf
+sed -i 's/FIXME/referred_bad_indirect/' referred_bad_indirect.conf
+afrc -c referred_bad_indirect.conf init "referred_bad_indirect"
 ca_req_submit "friend.ref" "referred_bad_indirect"
 ca_req_sign "friend.ref" "referred_bad_indirect" "v3_client"
 ca_req_receive "friend.ref" "referred_bad_indirect"
@@ -478,8 +489,9 @@ RESULTS[$i]=""
 
 ## Create the bad referred2 certificate.
 set -e
-ca_gen "referred_bad2"
-ca_req_gen "referred_bad2"
+cp afrc.conf referred_bad2.conf
+sed -i 's/FIXME/referred_bad2/' referred_bad2.conf
+afrc -c referred_bad2.conf init "referred_bad2"
 ca_req_submit "friend.ref" "referred_bad2"
 ca_req_sign "friend.ref" "referred_bad2" "v3_client"
 ca_req_receive "friend.ref" "referred_bad2"
