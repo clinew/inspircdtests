@@ -302,8 +302,7 @@ RESULTS[$i]=""
 set -e
 afrc -c friend.conf request-referrer
 afr -c afr.conf sign-referrer "friend.ref/csr/friend.ref.pem" "friend"
-ca_req_receive "signing_ca" "friend.ref"
-ca_crl_gen "friend.ref"
+afrc -c friend.conf receive-referrer "signing_ca/certs/friend.ref.pem"
 afr -c afr.conf receive-crl "friend.ref/crl/friend.ref.pem" "friend"
 rc-service inspircd restart
 
@@ -356,8 +355,7 @@ afrc -c friend_bad_ref.conf receive-client "signing_ca/certs/friend_bad_ref.pem"
 ## Create bad referrer certificate.
 afrc -c friend_bad_ref.conf request-referrer
 afr -c afr.conf sign-referrer "friend_bad_ref.ref/csr/friend_bad_ref.ref.pem" "friend_bad_ref"
-ca_req_receive "signing_ca" "friend_bad_ref.ref"
-ca_crl_gen "friend_bad_ref.ref"
+afrc -c friend_bad_ref.conf receive-referrer "signing_ca/certs/friend_bad_ref.ref.pem"
 afr -c afr.conf receive-crl "friend_bad_ref.ref/crl/friend_bad_ref.ref.pem" "friend_bad_ref"
 rc-service inspircd restart
 
