@@ -18,7 +18,6 @@
 
 # Global configuration.
 set -ex
-source include.sh
 
 # Test dir home to backup original config.
 DIR_HOME="${HOME}/.inspircdtests"
@@ -565,6 +564,75 @@ RESULTS[$i]="\tNot implemented\n"
 i=$(($i + 1))
 j=0
 RESULTS[$i]="\tNot implemented\n"
+
+# Test 10: Evil referrer issues service certificate
+#        root_ca
+#         /   \
+# localhost   signing_ca --------
+#             /    |             \
+#         admin   friend_evil   friend_evil.ref
+#                                        \
+#                                       localhost_evil
+# A referrer uses their CA to issue a service certificate rather than a client
+# certificate.  This can be used to mimic the admin's services and is
+# therefore a bad thing.  Ensure that this service certificate is untrusted.
+# Parity: Ensure that the mimiced service is online.
+i=$(($i + 1))
+j=0
+RESULTS[$i]=""
+
+## Initiailize friend_evil's client certificate.
+set -e
+cp afrc.conf friend_evil.conf
+sed -i 's/FIXME/friend_evil/' friend_evil.conf
+afrc -c friend_evil.conf init "friend_evil"
+afr -c afr.conf sign-friend "friend_evil/csr/friend_evil.pem" "friend_evil"
+afrc -c friend_evil.conf receive-client "signing_ca/certs/friend_evil.pem"
+
+## Initialize friend_evil's referrer certificate.
+afrc -c friend_evil.conf request-referrer
+afr -c afr.conf sign-referrer "friend_evil.ref/csr/friend_evil.ref.pem" "friend_evil"
+afrc -c friend_evil.conf receive-referrer "signing_ca/certs/friend_evil.ref.pem"
+afr -c afr.conf receive-crl "friend_evil.ref/crl/friend_evil.ref.pem" "friend_evil"
+
+## Use referrer certificate to create a service certificate.
+cp afrc.conf localhost_evil.conf
+sed -i 's/FIXME/localhost_evil/' localhost_evil.conf
+afrc -c localhost_evil.conf init "localhost_evil"
+cp "localhost_evil/csr/localhost_evil.pem" "friend_evil.ref/csr/localhost_evil.pem"
+pushd "friend_evil.ref"
+sed -i "s/FIXME_SAN/localhost/" openssl.cnf
+openssl ca -config openssl.cnf -keyfile "private/friend_evil.ref.pem" -cert "certs/friend_evil.ref.pem" -extensions "v3_service" -in "csr/localhost_evil.pem" -out "certs/localhost_evil.pem" -batch -startdate $(TZ=UTC date +%Y%m%d%H%M%SZ --date "now - 3 seconds")
+popd
+cp "friend_evil.ref/certs/localhost_evil.pem" "localhost_evil/certs/localhost_evil.pem"
+
+## Configure InspIRCd to use the evil service certificate.
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/localhost_evil/certs/localhost_evil.pem!" "${DIR_IRCD}/modules.conf"
+chown -R "root:inspircd" "${DIR_SSL}/localhost_evil/private"
+chmod 0740 "${DIR_SSL}/localhost_evil/private/localhost_evil.pem"
+sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/localhost_evil/private/localhost_evil.pem!" "${DIR_IRCD}/modules.conf"
+rc-service inspircd restart
+
+## Test that a client rejects the service certificate.
+set +e
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: Client authenticated illegitimate service\n"
+fi
+
+## Parity: test that the service certificate accepts connections.
+subtest_mark
+(sleep 3) | openssl s_client -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: Service does not appear to be alive\n"
+fi
+
+## Restore InspIRCd configuration.
+set -e
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/localhost/private/localhost.pem!" "${DIR_IRCD}/modules.conf"
+rc-service inspircd restart
 
 # Print results.
 set +x
