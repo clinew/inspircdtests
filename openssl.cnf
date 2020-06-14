@@ -96,5 +96,11 @@ authorityKeyIdentifier = keyid:always,issuer
 basicConstraints = critical,CA:FALSE
 extendedKeyUsage = critical,clientAuth
 
+# DEPRECATED: Old, insecure extensions for v0.0.1 "friend" certificate.
+[ v3_friend ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical,CA:true,pathlen:0
+
 [ crl_ext ]
 authorityKeyIdentifier=keyid:always
