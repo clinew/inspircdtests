@@ -65,8 +65,8 @@ restore() {
 
 # Print out the current subtest number and increment the subtest counter.
 subtest_mark() {
-	echo "Test $i.$j"
 	j=$(($j + 1))
+	echo "Test $i.$j"
 }
 
 # Backup config dirs.
@@ -79,6 +79,7 @@ trap "restore" EXIT
 mkdir -p "${DIR_SSL}"
 cp "openssl.cnf" "${DIR_SSL}/openssl.cnf"
 cp "afr.conf" "${DIR_SSL}/afr.conf"
+sed -i 's/root_ca/new_root/' "${DIR_SSL}/afr.conf"
 cp "afrc.conf" "${DIR_SSL}/afrc.conf"
 pushd "${DIR_SSL}"
 
@@ -105,10 +106,13 @@ afr -c afr.conf sign-friend "new_friend/csr/new_friend.pem" "new_friend"
 afrc -c new_friend.conf receive-client "signing_ca/certs/new_friend.pem"
 
 # Test 0: Old PKI.
+#       old_root
+#          |
+#       old_friend
 # This test configures InspIRCd for the old-style PKI.  In this configuration,
-# the old friend certificate should work but not the new friend certificate.
+# the old certificates should work but not the new certificates.
 i=0
-j=0
+j=-1
 RESULTS[$i]=""
 echo "Test $i: Old PKI"
 
@@ -121,8 +125,22 @@ chmod 0740 "${DIR_SSL}/old_root/private/old_root.pem"
 sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/old_root/private/old_root.pem!" "${DIR_IRCD}/modules.conf"
 rc-service inspircd restart
 
-## Connect as the old friend.
+## Connect against the old cert.
 set +e
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/old_root/certs/old_root.pem" -connect localhost:6697
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: Client did not authenticate old root\n"
+fi
+
+## Connect against the new cert.
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: Client authenticated new root\n"
+fi
+
+## Connect as the old friend.
 subtest_mark
 connect "old_friend"
 if [ $? -ne 0 ]; then
@@ -137,16 +155,27 @@ if [ $? -ne 1 ]; then
 fi
 
 # Test 1: Transition PKI.
-#   new_root
-#       |
-#   signing_ca
-#       |
-#   old_root
+#               - Service -                       - Signing -
+#        old_root        new_root                  new_root
+#              \           /                           |
+#            cross_root   /                        signing_ca
+#                  \     /                             |
+#                 localhost                        old_root
 # This test configures InspIRCd for the transition PKI.  In this configuration,
-# the old friend certificate and new friend certificate should both be
-# authorized.
+# the old certificates and new certificates should both be authorized.
+# For the service certificate, this is done by having the old root sign the new
+# root, creating the "cross_root" certificate; The service then presents both
+# the service certificate and the cross_root certificate.  A program
+# configured to trust the old root will follow the left-hand path to the old
+# root; a program configured to trust the new root will (hopefully) ignore the
+# presented cross_root certificate and will follow the right-hand path to the
+# new root.
+# For the signing certificate, have the signing CA cross-certify the old root
+# as a "referrer" certificate.  The pathlen:0 attributes means that any old
+# referred users won't be trusted, but no one bothered to do that so I don't
+# really care.
 i=$(($i + 1))
-j=0
+j=-1
 RESULTS[$i]=""
 echo "Test $i: Transition PKI"
 
@@ -159,15 +188,39 @@ ca_req_sign "signing_ca" "old_root" "v3_referrer"
 cat "${DIR_SSL}/ca.pem" "${DIR_SSL}/signing_ca/certs/old_root.pem" > "${DIR_SSL}/transition_ca.pem"
 cat "${DIR_SSL}/crl.pem" "${DIR_SSL}/old_root/crl/old_root.pem" > "${DIR_SSL}/transition_crl.pem"
 
+# Cross-certify the new root with the old root.
+ca_req_gen "new_root"
+pushd "new_root"
+openssl req -key "private/new_root.pem" -days 36500 -new -out "csr/new_root.pem" -subj "/CN=InspIRCd tests AFR Root CA/"
+popd
+ca_req_submit "old_root" "new_root"
+ca_req_sign "old_root" "new_root"
+cat "${DIR_SSL}/localhost/certs/localhost.pem" "${DIR_SSL}/old_root/certs/new_root.pem" > "${DIR_SSL}/transition_certs.pem"
+
 ## Configure InspIRCd to use the new PKI.
-set -e
 chown -R "root:inspircd" "${DIR_SSL}"
 sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/transition_ca.pem!" "${DIR_IRCD}/modules.conf"
-sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/transition_certs.pem!" "${DIR_IRCD}/modules.conf"
 sed -ri "s!#*(crlfile=\")[^\"]+!\1${DIR_SSL}/transition_crl.pem!" "${DIR_IRCD}/modules.conf"
 chmod 0740 "${DIR_SSL}/localhost/private/localhost.pem"
 sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/localhost/private/localhost.pem!" "${DIR_IRCD}/modules.conf"
 rc-service inspircd restart
+
+## Connect against the old cert.
+set +e
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/old_root/certs/old_root.pem" -connect localhost:6697
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: Client did not authenticate old root\n"
+fi
+
+## Connect against the new cert.
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: Client did not authenticate new root\n"
+fi
+
 
 ## Connect as the old friend.
 set +e
@@ -186,10 +239,10 @@ fi
 
 # Test 2: New PKI.
 # This test configures InspIRCd for the new-style AFR PKI.  In this
-# configuration, the old friend certificate should not be authorized but the
-# new friend certificate should be authorized.
+# configuration, the old certificates should not be authorized but the new
+# certificates should be authorized.
 i=$(($i + 1))
-j=0
+j=-1
 RESULTS[$i]=""
 echo "Test $i: New PKI"
 
@@ -203,8 +256,22 @@ chmod 0740 "${DIR_SSL}/localhost/private/localhost.pem"
 sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/localhost/private/localhost.pem!" "${DIR_IRCD}/modules.conf"
 rc-service inspircd restart
 
-## Connect as the old friend.
+## Connect against the old cert.
 set +e
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/old_root/certs/old_root.pem" -connect localhost:6697
+if [ $? -ne 1 ]; then
+	RESULTS[$i]+="\t$j: Client authenticated old root\n"
+fi
+
+## Connect against the new cert.
+subtest_mark
+(sleep 3) | openssl s_client -verify_return_error -CAfile "${DIR_SSL}/certs.pem" -connect localhost:6697
+if [ $? -ne 0 ]; then
+	RESULTS[$i]+="\t$j: Client did not authenticate new root\n"
+fi
+
+## Connect as the old friend.
 subtest_mark
 connect "old_friend"
 if [ $? -ne 1 ]; then
