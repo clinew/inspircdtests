@@ -102,6 +102,9 @@ cp "openssl.cnf" "${DIR_SSL}/openssl.cnf"
 cp "afr.conf" "${DIR_SSL}/afr.conf"
 cp "afrc.conf" "${DIR_SSL}/afrc.conf"
 cp "afr_fake.conf" "${DIR_SSL}/afr_fake.conf"
+sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/ca.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/service/private/service.pem!" "${DIR_IRCD}/modules.conf"
 pushd "${DIR_SSL}"
 
 # Test 00: Initialize.
