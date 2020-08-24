@@ -197,7 +197,7 @@ ca_req_submit "old_root" "new_root"
 ca_req_sign "old_root" "new_root"
 cat "${DIR_SSL}/localhost/certs/localhost.pem" "${DIR_SSL}/old_root/certs/new_root.pem" > "${DIR_SSL}/transition_certs.pem"
 
-## Configure InspIRCd to use the new PKI.
+## Configure InspIRCd to use the transition PKI.
 chown -R "root:inspircd" "${DIR_SSL}"
 sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/transition_ca.pem!" "${DIR_IRCD}/modules.conf"
 sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/transition_certs.pem!" "${DIR_IRCD}/modules.conf"

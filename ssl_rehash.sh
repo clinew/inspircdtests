@@ -6,7 +6,7 @@
 # able to connect with their certificate; after rehashing, they should
 # be able to connect.
 #
-# Copyright (C) 2018  Wade T. Cline
+# Copyright (C) 2018,2020  Wade T. Cline
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -72,6 +72,9 @@ mkdir -p "${DIR_HOME}"
 cp -rp "${DIR_IRCD}" "${DIR_HOME}/"
 cp -rp "${DIR_SSL}" "${DIR_HOME}/"
 trap "restore" EXIT
+
+# Configure InspIRCd OpenSSL.
+inspircd_conf
 
 # Create owner cert.
 cd "${DIR_HOME}"

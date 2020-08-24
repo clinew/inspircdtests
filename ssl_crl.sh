@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This tests the CRL functionality.
-# Copyright (C) 2018  Wade T. Cline
+# Copyright (C) 2018,2020  Wade T. Cline
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -171,6 +171,13 @@ pushd "c"
 openssl ca -config openssl.cnf -keyfile private/c.pem -cert certs/c.pem -extensions v3_fof -days 7200 -notext -md sha512 -in csr/e.pem -out certs/e.pem -batch
 cp certs/e.pem ../e/certs/e.pem
 popd
+
+# Configure InspIRCd OpenSSL.
+sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/certs/client_cas.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs/cert.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/private/key.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(crlfile=\")[^\"]+!\1${DIR_SSL}/crl/crl.pem!" "${DIR_IRCD}/modules.conf"
+sed -ri "s!#*(crlpath=\")[^\"]+!\1${DIR_SSL}/crl!" "${DIR_IRCD}/modules.conf"
 
 # Configure inspircd to trust A, B, and C.
 cat a/certs/a.pem b/certs/b.pem c/certs/c.pem > "${DIR_SSL}/certs/client_cas.pem"

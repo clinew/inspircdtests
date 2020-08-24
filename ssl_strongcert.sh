@@ -4,7 +4,7 @@
 # by a whitelist of minimum keytype+keysize pairs and a whitelist of signature
 # algorithms.
 #
-# Copyright (C) 2018  Wade T. Cline
+# Copyright (C) 2018,2020  Wade T. Cline
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -73,6 +73,9 @@ if [ $? -ne 0 ]; then
 	echo "Expected to find 'peer_sigalg=' in OpenSSL config file"
 	exit 1
 fi
+
+# Configure InspIRCd OpenSSL.
+inspircd_conf
 
 # Backup config dirs.
 mkdir -p "${DIR_HOME}"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test InspIRCd OpenSSL logging functionality.
-# Copyright (C) 2018  Wade T. Cline
+# Copyright (C) 2018,2020  Wade T. Cline
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -83,6 +83,9 @@ cp -rp "${DIR_IRCD}" "${DIR_HOME}/"
 cp -rp "${DIR_SSL}" "${DIR_HOME}/"
 pushd "${DIR_HOME}"
 trap "restore" INT
+
+# Configure InspIRCd OpenSSL.
+inspircd_conf
 
 # Generate CA certificate
 ca_gen "root_ca"

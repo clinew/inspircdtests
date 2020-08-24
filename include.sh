@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Various helper functions
-# Copyright (C) 2018  Wade T. Cline
+# Copyright (C) 2018,2020  Wade T. Cline
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3 as
@@ -128,6 +128,16 @@ ca_selfsign() {
 	pushd "$1"
 	openssl req -key "private/$1.pem" -new -x509 -days 7200 -sha512 -out "certs/$1.pem" -subj "/CN=$1/"
 	popd
+}
+
+# Standardize InspIRCd configuration (sort of).  This currently sets the
+# OpenSSL configuration to point to expected paths.
+inspircd_conf() {
+	sed -ri "s!#*(cafile=\")[^\"]+!\1${DIR_SSL}/certs/client_cas.pem!" "${DIR_IRCD}/modules.conf"
+	sed -ri "s!#*(certfile=\")[^\"]+!\1${DIR_SSL}/certs/cert.pem!" "${DIR_IRCD}/modules.conf"
+	sed -ri "s!#*(keyfile=\")[^\"]+!\1${DIR_SSL}/private/key.pem!" "${DIR_IRCD}/modules.conf"
+	sed -ri "s!#*(crlfile=\")[^\"]+!\1${DIR_SSL}/crl/crl.pem!" "${DIR_IRCD}/modules.conf"
+	sed -ri "s!#*(crlpath=\")[^\"]+!\1${DIR_SSL}/crl!" "${DIR_IRCD}/modules.conf"
 }
 
 # Return 1 if the OpenSSL module is using SHA-256, 0 otherwise.
