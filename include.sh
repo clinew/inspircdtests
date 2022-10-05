@@ -141,6 +141,7 @@ inspircd_conf() {
 }
 
 # Return 1 if the OpenSSL module is using SHA-256, 0 otherwise.
+# Could break if multiple profiles exist.
 openssl_sha256() {
-	grep -zPo '(?s)<openssl.*\n\h*hash="sha256".*>' "${DIR_IRCD}/modules.conf" > "/dev/null"
+	grep -zPo '(?s)<sslprofile.*\n\h*hash="sha256".*>' "${DIR_IRCD}/modules.conf" > "/dev/null"
 }
