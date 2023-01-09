@@ -19,3 +19,27 @@ ssl_strongcert: Test that strong peer (client) certificate validation is
 	implemented correctly; this feature allows the server to use a
 	whitelist of key types and minimum sizes and another whitelist for
 	certificate signature algorithms.
+
+
+Below are some notes on manual testing that can be done for various USE flags:
+argon2:
+/etc/inspircd/modules.conf
+<module name="argon2">
+<module name="password_hash">
+/etc/inspircd/opers.conf
+    <oper name="test"
+        host="*"
+        hash="argon2id"
+        password="$argon2id$v=19$m=131072,t=3,p=1$rRJjAyPyZFqYRhAPpFkvrQ$uDUl42/8aLCUPTrQWgJaj5/Ir6frOF6JcxH9RuAAKzY" # Password is 'password'.
+        type="NetAdmin">
+rc-service inspircd restart
+/oper test password
+
+/etc/inspircd/modules.conf
+<module name="regex_pcre2">
+<module name="filter">
+<filteropts engine="pcre" notifyuser="yes" warnonselfmsg="no">
+<keyword pattern="^.*test.*$" reason="Testing!" action="block" flags="p">
+rc-service inspircd restart
+/join #chat
+test
